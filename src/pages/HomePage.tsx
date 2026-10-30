@@ -1,0 +1,58 @@
+import { Badge, PageHeader, StatRow } from '../components/common'
+import { alerts, demoNow, inquiries, store } from '../data/mock'
+import { getHomeStats, getRecentActivities, getTodaySummary } from '../domain/rules'
+import { formatKstDate } from '../domain/time'
+
+export default function HomePage() {
+  const stats = getHomeStats(alerts, inquiries, demoNow)
+  const activities = getRecentActivities(alerts, demoNow)
+  const summary = getTodaySummary(stats.unconfirmedAlerts)
+
+  return (
+    <>
+      <PageHeader title="매장 대시보드" subtitle="우리 매장의 오늘을 한눈에" />
+      <div className="page-body">
+        <section className="card store-card">
+          <div>
+            <h2>{store.name}</h2>
+            <p className="caption">{formatKstDate(demoNow)} · 실시간 운영 현황</p>
+          </div>
+          <Badge tone="green">{store.status}</Badge>
+        </section>
+
+        <StatRow
+          items={[
+            { label: '오늘 감지', value: stats.detected, tone: 'blue' },
+            { label: '미확인 알림', value: stats.unconfirmedAlerts, tone: 'red' },
+            { label: '고객 문의', value: stats.inquiries, tone: 'ink' },
+          ]}
+        />
+
+        <section className="card">
+          <h2>최근 활동</h2>
+          <ul className="activity-list">
+            {activities.map((activity) => (
+              <li key={activity.id}>
+                <span className={`dot dot--${activity.tone}`} aria-hidden />
+                <div className="activity-list__text">
+                  <strong>{activity.title}</strong>
+                  <span className="caption">{activity.status}</span>
+                </div>
+                <time className="caption">{activity.time}</time>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="card">
+          <h2>AI 오늘의 요약</h2>
+          <p className="caption">매장 운영 중 확인이 필요한 항목을 정리했어요.</p>
+          <div className="callout">
+            <strong>{summary.headline}</strong>
+            <span>{summary.detail}</span>
+          </div>
+        </section>
+      </div>
+    </>
+  )
+}
