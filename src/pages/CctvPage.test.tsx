@@ -87,7 +87,7 @@ test('연결이 끊긴 카메라는 상태와 안내를 보여주고 복구되�
   rerender(<CctvPage cameras={cameras} {...props} />)
 
   expect(screen.queryByText('연결이 끊겼습니다')).not.toBeInTheDocument()
-  expect(screen.getByText('CCTV 화면')).toBeInTheDocument()
+  expect(screen.getByText('실시간 영상 연결 전입니다')).toBeInTheDocument()
 })
 
 test('클립을 누르면 해당 클립을 재생한다', async () => {

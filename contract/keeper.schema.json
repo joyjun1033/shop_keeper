@@ -16,10 +16,19 @@
 
     "Store": {
       "type": "object",
-      "required": ["name", "status"],
+      "required": ["name"],
       "properties": {
-        "name": { "type": "string" },
-        "status": { "type": "string" }
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "Integration": {
+      "description": "관리용 앱 연결 상태. waiting은 한 번도 연결된 적 없음, offline은 연결이 끊김",
+      "type": "object",
+      "required": ["status", "lastSeenAt"],
+      "properties": {
+        "status": { "enum": ["waiting", "online", "offline"] },
+        "lastSeenAt": { "oneOf": [{ "$ref": "#/$defs/DateTime" }, { "type": "null" }] }
       },
       "additionalProperties": false
     },
@@ -102,9 +111,10 @@
     },
     "Dashboard": {
       "type": "object",
-      "required": ["store", "cameras", "alerts", "clips", "inquiries"],
+      "required": ["store", "integration", "cameras", "alerts", "clips", "inquiries"],
       "properties": {
         "store": { "$ref": "#/$defs/Store" },
+        "integration": { "$ref": "#/$defs/Integration" },
         "cameras": { "type": "array", "items": { "$ref": "#/$defs/Camera" } },
         "alerts": { "type": "array", "items": { "$ref": "#/$defs/Alert" } },
         "clips": { "type": "array", "items": { "$ref": "#/$defs/Clip" } },

@@ -1,5 +1,5 @@
 import { formatEventTime, kstDay, kstHour, listDays, shiftDay } from './time'
-import type { AlertItem, AlertKind, Camera, Clip, ClipView, Inquiry, Period, Tone } from './types'
+import type { AlertItem, AlertKind, Camera, Clip, ClipView, Inquiry, Integration, Period, Tone } from './types'
 
 const MAX_PERIOD_DAYS = 31
 const SLOT_HOURS = 4
@@ -65,7 +65,28 @@ export function getHomeStats(alerts: AlertItem[], inquiries: Inquiry[], now: Dat
   }
 }
 
-export function getTodaySummary(unconfirmedAlerts: number) {
+export function getIntegrationBadge({ status }: Integration): { label: string; tone: Tone } {
+  if (status === 'waiting') return { label: '연동 대기', tone: 'orange' }
+  if (status === 'offline') return { label: '연결 확인 필요', tone: 'red' }
+  return { label: '운영 정상', tone: 'green' }
+}
+
+// 숫자가 0이어도 이상이 없다는 뜻이 아닐 때만 문구를 돌려준다
+export function getIntegrationNotice({ status, lastSeenAt }: Integration, now: Date): string | null {
+  if (status === 'waiting') return '관리용 앱이 아직 연결되지 않아 집계를 시작하지 않았습니다.'
+  if (status === 'offline' && lastSeenAt) {
+    return `관리용 앱 연결이 끊겼습니다. 마지막 수신(${formatEventTime(lastSeenAt, now)}) 이후는 집계되지 않았습니다.`
+  }
+  return null
+}
+
+export function getTodaySummary(unconfirmedAlerts: number, { status }: Integration) {
+  if (status === 'waiting') {
+    return {
+      headline: '아직 집계된 데이터가 없습니다.',
+      detail: '관리용 앱이 연결되면 오늘의 요약을 보여드려요.',
+    }
+  }
   if (unconfirmedAlerts === 0) {
     return {
       headline: '미확인 이벤트가 없습니다.',
@@ -205,13 +226,10 @@ export function getTimeTrend(alerts: AlertItem[], period: Period) {
   return withScale(slots)
 }
 
-export function getReportSummary(
-  stats: { detected: number; unconfirmed: number },
-  recommendation: string,
-): string[] {
+export function getReportSummary(stats: { detected: number; unconfirmed: number }): string[] {
+  if (stats.detected === 0) return ['선택한 기간에 집계된 이벤트가 없습니다.']
   return [
     `선택한 기간의 이상행동 감지 이벤트 ${stats.detected}건`,
     stats.unconfirmed > 0 ? `미확인 이벤트 ${stats.unconfirmed}건 확인 필요` : '미확인 이벤트 없음',
-    recommendation,
   ]
 }

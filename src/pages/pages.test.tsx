@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
-import { alerts, clips, demoNow, inquiries, store } from '../data/mock'
 import type { AlertItem, Inquiry } from '../domain/types'
+import { alerts, clips, demoNow, inquiries, onlineIntegration, store } from '../test/fixtures'
 import AlertsPage from './AlertsPage'
 import HomePage from './HomePage'
 import InquiriesPage from './InquiriesPage'
@@ -19,8 +19,21 @@ function renderAlerts(items: AlertItem[] = alerts) {
 }
 
 describe('홈', () => {
+  function renderHome(props: Partial<Parameters<typeof HomePage>[0]> = {}) {
+    render(
+      <HomePage
+        store={store}
+        integration={onlineIntegration}
+        alerts={alerts}
+        inquiries={inquiries}
+        now={demoNow}
+        {...props}
+      />,
+    )
+  }
+
   test('예시 데이터로 계산한 숫자를 보여준다', () => {
-    render(<HomePage store={store} alerts={alerts} inquiries={inquiries} now={demoNow} />)
+    renderHome()
 
     expect(statValue('오늘 감지')).toHaveTextContent('03건')
     expect(statValue('미확인 알림')).toHaveTextContent('01건')
@@ -29,7 +42,7 @@ describe('홈', () => {
   })
 
   test('최근 활동에 알림만 최신순으로 나온다', () => {
-    render(<HomePage store={store} alerts={alerts} inquiries={inquiries} now={demoNow} />)
+    renderHome()
 
     const items = within(screen.getByRole('list')).getAllByRole('listitem')
 
@@ -40,21 +53,22 @@ describe('홈', () => {
     ])
   })
 
-  test('이벤트와 문의가 하나도 없어도 화면이 유지된다', () => {
-    render(<HomePage store={store} alerts={[]} inquiries={[]} now={demoNow} />)
+  test('연동됐는데 이벤트가 없으면 0건과 확인할 것이 없다는 안내를 보여준다', () => {
+    renderHome({ alerts: [], inquiries: [] })
 
     expect(statValue('오늘 감지')).toHaveTextContent('00건')
     expect(screen.getByText('미확인 이벤트가 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('아직 집계된 활동이 없습니다.')).toBeInTheDocument()
   })
 
   test('서버 연결이 없으면 로그아웃 버튼을 보여주지 않는다', () => {
-    render(<HomePage store={store} alerts={[]} inquiries={[]} now={demoNow} />)
+    renderHome()
 
     expect(screen.queryByRole('button', { name: '로그아웃' })).not.toBeInTheDocument()
   })
 
   test('서버에서 받은 매장 이름을 보여준다', () => {
-    render(<HomePage store={{ name: '역삼 무인점', status: '운영 정상' }} alerts={[]} inquiries={[]} now={demoNow} />)
+    renderHome({ store: { name: '역삼 무인점' } })
 
     expect(screen.getByRole('heading', { name: '역삼 무인점' })).toBeInTheDocument()
   })
@@ -138,7 +152,7 @@ describe('알림', () => {
   test('알림이 없으면 안내를 보여준다', () => {
     renderAlerts([])
 
-    expect(screen.getByText('새로운 알림이 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('아직 집계된 알림이 없습니다.')).toBeInTheDocument()
   })
 })
 
@@ -177,7 +191,7 @@ describe('문의', () => {
   test('문의가 없으면 안내를 보여준다', () => {
     renderInquiries([])
 
-    expect(screen.getByText('접수된 문의가 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('아직 접수된 문의가 없습니다.')).toBeInTheDocument()
   })
 })
 
@@ -313,7 +327,8 @@ describe('리포트', () => {
   test('이벤트가 없는 기간은 그래프 대신 안내를 보여준다', async () => {
     await renderReport([])
 
-    expect(screen.getByText('선택한 기간에 발생한 이벤트가 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('아직 집계된 이벤트가 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('선택한 기간에 집계된 이벤트가 없습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: '일별 이벤트 수' })).not.toBeInTheDocument()
   })
 })

@@ -2,8 +2,8 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from './App'
-import { alerts, cameras, clips, demoNow, inquiries, store } from './data/mock'
 import { confirmAlert } from './domain/rules'
+import { alerts, cameras, clips, demoNow, inquiries, onlineIntegration, store } from './test/fixtures'
 
 const TOKEN = 'test-token'
 const TOKEN_KEY = 'keeper.token'
@@ -12,7 +12,14 @@ type Call = { method: string; url: string }
 
 // 실제 서버와 같은 경로와 상태 코드로 답하는 가짜 서버
 function createFakeServer() {
-  const state = { alerts, inquiries, status: 200, offline: false, calls: [] as Call[] }
+  const state = {
+    alerts,
+    inquiries,
+    integration: onlineIntegration,
+    status: 200,
+    offline: false,
+    calls: [] as Call[],
+  }
 
   const respond = (body: unknown, status = 200) =>
     new Response(status === 204 ? null : JSON.stringify(body), { status })
@@ -30,7 +37,14 @@ function createFakeServer() {
     if (state.status !== 200) return respond({}, state.status)
 
     if (input.startsWith('/api/dashboard')) {
-      return respond({ store, cameras, clips, alerts: state.alerts, inquiries: state.inquiries })
+      return respond({
+        store,
+        cameras,
+        clips,
+        integration: state.integration,
+        alerts: state.alerts,
+        inquiries: state.inquiries,
+      })
     }
     if (input.startsWith('/api/alerts?')) return respond(state.alerts)
     const confirm = input.match(/^\/api\/alerts\/(.+)\/confirm$/)
@@ -229,6 +243,21 @@ describe('주기적 갱신', () => {
     await tick(10_000)
 
     expect(statValue('미확인 알림')).toHaveTextContent('02건')
+  })
+
+  test('관리용 앱이 연결되면 다음 갱신 때 연동 대기 안내가 사라진다', async () => {
+    const server = createFakeServer()
+    server.integration = { status: 'waiting', lastSeenAt: null }
+    signedIn()
+    render(<App dataSource="api" />)
+    await tick(0)
+    expect(screen.getByText('연동 대기')).toBeInTheDocument()
+
+    server.integration = onlineIntegration
+    await tick(10_000)
+
+    expect(screen.getByText('운영 정상')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   test('연결이 끊기면 마지막 내용을 유지하고 복구되면 안내가 사라진다', async () => {

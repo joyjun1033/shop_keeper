@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, test } from 'vitest'
-import App from './App'
+import OwnerApp from './OwnerApp'
+import { createFixtureApi, demoNow } from './test/fixtures'
 
 function statValue(label: string) {
   return within(screen.getByText(label).parentElement!).getByRole('strong')
@@ -12,7 +13,7 @@ async function goTo(tab: string) {
 }
 
 async function renderApp() {
-  render(<App />)
+  render(<OwnerApp api={createFixtureApi()} startAt={demoNow} pollMs={0} />)
   await screen.findByText('매장 대시보드')
 }
 
@@ -86,5 +87,5 @@ test('클립을 재생하다 카메라를 고르면 실시간 화면으로 바�
   await userEvent.click(screen.getByRole('button', { name: /^카메라 01/ }))
 
   expect(screen.getByText('카메라 01 · 매장 입구')).toBeInTheDocument()
-  expect(screen.getByText('CCTV 화면')).toBeInTheDocument()
+  expect(screen.getByText('실시간 영상 연결 전입니다')).toBeInTheDocument()
 })

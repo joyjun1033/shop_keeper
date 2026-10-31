@@ -5,8 +5,7 @@ from pathlib import Path
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS stores (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  status TEXT NOT NULL
+  name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS owners (
@@ -24,7 +23,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE TABLE IF NOT EXISTS devices (
   key_hash TEXT PRIMARY KEY,
-  store_id TEXT NOT NULL REFERENCES stores(id)
+  store_id TEXT NOT NULL REFERENCES stores(id),
+  last_seen_at REAL
 );
 
 CREATE TABLE IF NOT EXISTS processed_events (

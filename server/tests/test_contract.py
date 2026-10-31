@@ -90,8 +90,14 @@ def test_period_alerts_match_the_schema(schema, store):
         validator.validate(alert)
 
 
-def test_seed_events_match_the_schema(schema):
-    from seed import build_events
+def test_dashboard_before_integration_matches_the_schema(schema, store):
+    dashboard = store.dashboard(store.login())
+
+    validator_for(schema, "Dashboard").validate(dashboard)
+
+
+def test_sample_events_match_the_schema(schema):
+    from send_sample_events import build_events
 
     validator = validator_for(schema, "IngestEvent")
     events = build_events(datetime(2026, 10, 23, 6, 0, tzinfo=UTC))

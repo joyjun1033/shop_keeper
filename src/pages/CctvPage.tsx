@@ -80,7 +80,7 @@ export default function CctvPage({
                 ) : (
                   <span className="player__pill player__pill--live">
                     <span className={connected ? 'dot dot--green' : 'dot dot--red'} aria-hidden />
-                    {connected ? '실시간' : '연결 끊김'}
+                    {connected ? '연결됨' : '연결 끊김'}
                   </span>
                 )}
               </div>
@@ -88,12 +88,12 @@ export default function CctvPage({
                 {activeClip ? (
                   <>
                     <Play size={32} fill="currentColor" strokeWidth={1.5} aria-hidden />
-                    <span>클립 재생 화면</span>
+                    <span>클립 영상 연결 전입니다</span>
                   </>
                 ) : connected ? (
                   <>
                     <Video size={34} fill="currentColor" strokeWidth={1.5} aria-hidden />
-                    <span>CCTV 화면</span>
+                    <span>실시간 영상 연결 전입니다</span>
                   </>
                 ) : (
                   <>
@@ -125,7 +125,7 @@ export default function CctvPage({
               <div className="player__bar">
                 <span className="player__live">
                   <span className="player__rec" aria-hidden />
-                  {activeClip ? activeClip.duration : connected ? '라이브' : '대기 중'}
+                  {activeClip ? activeClip.duration : '대기 중'}
                 </span>
                 <span>
                   카메라 {formatOrder(active.index + 1)} / {formatOrder(cameras.length)}
@@ -167,7 +167,7 @@ export default function CctvPage({
           <section className="card empty-card">
             <Video size={30} fill="currentColor" strokeWidth={1.5} aria-hidden />
             <h2>등록된 카메라가 없습니다</h2>
-            <p className="caption">카메라를 등록하면 실시간 화면을 볼 수 있어요.</p>
+            <p className="caption">관리용 앱에 카메라를 연결하면 여기에 표시됩니다.</p>
           </section>
         )}
 

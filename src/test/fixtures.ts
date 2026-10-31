@@ -1,13 +1,16 @@
-// 서버 없이 화면을 볼 때 쓰는 예시 데이터. 서버와 연결하면 쓰이지 않는다.
-// 화면의 숫자는 여기에 적지 않고 domain/rules.ts에서 계산한다.
-import type { AlertItem, AlertKind, Camera, Clip, Inquiry, Store } from '../domain/types'
+// 테스트 전용 예시 데이터. 앱 코드에서 가져다 쓰면 안 된다.
+import type { Dashboard, KeeperApi } from '../api/types'
+import { confirmAlert, markInquiryRead } from '../domain/rules'
+import type { AlertItem, AlertKind, Camera, Clip, Inquiry, Integration, Store } from '../domain/types'
 
 // 예시 데이터가 기준으로 삼는 현재 시각
 export const demoNow = new Date('2026-10-23T15:00:00+09:00')
 
-export const store: Store = {
-  name: '우리동네 아이스크림점',
-  status: '운영 정상',
+export const store: Store = { name: '우리동네 아이스크림점' }
+
+export const onlineIntegration: Integration = {
+  status: 'online',
+  lastSeenAt: '2026-10-23T14:59:00+09:00',
 }
 
 export const cameras: Camera[] = [
@@ -85,7 +88,6 @@ function pastAlert(id: string, occurredAt: string, kind: AlertKind): AlertItem {
   }
 }
 
-// 지난 처리 완료 이벤트. 리포트 집계에만 쓰인다
 const pastAlerts: AlertItem[] = [
   pastAlert('e4', '2026-10-17T13:20:00+09:00', 'movement'),
   pastAlert('e5', '2026-10-18T22:10:00+09:00', 'duration'),
@@ -130,4 +132,26 @@ export const inquiries: Inquiry[] = [
   },
 ]
 
-export const reportRecommendation = '냉장고 구역 점검을 권장합니다'
+export const dashboard: Dashboard = {
+  store,
+  integration: onlineIntegration,
+  cameras,
+  alerts,
+  clips,
+  inquiries,
+}
+
+export function createFixtureApi(overrides: Partial<Dashboard> = {}): KeeperApi {
+  let current = { ...dashboard, ...overrides }
+
+  return {
+    getDashboard: async () => current,
+    getAlerts: async () => current.alerts,
+    confirmAlert: async (id) => {
+      current = { ...current, alerts: confirmAlert(current.alerts, id) }
+    },
+    markInquiryRead: async (id) => {
+      current = { ...current, inquiries: markInquiryRead(current.inquiries, id) }
+    },
+  }
+}

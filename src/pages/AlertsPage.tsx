@@ -51,7 +51,7 @@ export default function AlertsPage({ alerts, clips, now, onConfirm, onOpenClip }
     <>
       <PageHeader title="AI 이상행동 알림" subtitle="매장 내 이상행동을 AI가 실시간으로 알려드립니다" />
       <div className="page-body">
-        {visible.length === 0 && <p className="card empty-note">새로운 알림이 없습니다.</p>}
+        {visible.length === 0 && <p className="card empty-note">아직 집계된 알림이 없습니다.</p>}
         {visible.map((alert) => (
           <article className="card notice" key={alert.id}>
             <div className="notice__head">

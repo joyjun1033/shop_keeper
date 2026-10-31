@@ -5,18 +5,23 @@
 
 ## 실행
 
-### 화면만 보기
-
-서버 없이 예시 데이터로 실행합니다.
+먼저 프로젝트 폴더에서 패키지를 설치합니다.
 
 ```bash
 npm install
-npm run dev
+```
+
+### 화면만 보기
+
+서버 없이 연동 전 빈 화면을 봅니다. 지어낸 데이터는 표시하지 않습니다.
+
+```bash
+npm run dev:preview
 ```
 
 ### 서버와 함께 실행
 
-Python 3.12 이상이 필요합니다. 처음 한 번 `server` 폴더에서 설치와 개발용 데이터 생성을 합니다.
+Python 3.12 이상이 필요합니다. 처음 한 번 `server` 폴더에서 설치와 개발용 매장 생성을 합니다.
 
 ```bash
 python -m venv .venv
@@ -30,7 +35,7 @@ python -m venv .venv
 .venv/Scripts/python seed.py
 ```
 
-`seed.py`는 개발용 계정과 관리용 앱 키를 `server/dev-credentials.local.json`에 저장합니다. 이 파일은 저장소에 올라가지 않습니다.
+`seed.py`는 매장과 계정만 만들고 이벤트는 만들지 않습니다. 계정과 관리용 앱 키는 `server/dev-credentials.local.json`에 저장되며, 이 파일은 저장소에 올라가지 않습니다.
 
 그다음 터미널 두 개를 열어 `server` 폴더에서 서버를, 프로젝트 폴더에서 앱을 실행합니다.
 
@@ -39,7 +44,13 @@ python -m venv .venv
 ```
 
 ```bash
-npm run dev:api
+npm run dev
+```
+
+관리용 앱이 아직 없을 때는 `server` 폴더에서 아래 명령으로 시험 이벤트를 보내 연동 흐름을 확인할 수 있습니다. 실제 매장 데이터가 아니므로 개발 중에만 씁니다.
+
+```bash
+.venv/Scripts/python send_sample_events.py
 ```
 
 ## 테스트
@@ -65,14 +76,15 @@ npm run test:coverage
 - `src/pages/`: 화면
 - `src/components/`: 하단 탭과 공통 요소
 - `src/domain/`: 집계와 상태 규칙. 화면의 숫자는 모두 여기서 계산합니다.
-- `src/api/`: 서버 연결(`httpApi.ts`)과 예시 데이터 연결(`mockApi.ts`)
-- `src/data/mock.ts`: 서버 없이 볼 때 쓰는 예시 데이터
+- `src/api/`: 서버 연결(`httpApi.ts`)과 서버 없는 빈 화면(`previewApi.ts`)
+- `src/test/fixtures.ts`: 테스트 전용 예시 데이터. 앱 코드에서는 쓸 수 없습니다.
 - `src/styles.css`: 색상과 전체 스타일
 
 ## 관리용 앱 연동
 
 관리용 앱은 `POST /ingest/events`로 이벤트를 보내고, `X-Device-Key` 헤더에 매장별 키를 넣습니다. 형식은 `contract/keeper.schema.json`, 종류별 예시는 `contract/examples/events.json`에 있습니다.
 
+- 이벤트가 없어도 1분마다 `POST /ingest/heartbeat`를 보냅니다. 5분 동안 신호가 없으면 점주 앱에 연결이 끊겼다고 표시됩니다. 한 번도 연결된 적 없는 매장은 연동 대기로 표시됩니다.
 - 이벤트마다 고유한 `eventId`를 넣습니다. 같은 `eventId`를 다시 보내면 한 번만 반영되므로, 응답을 받지 못했을 때 안심하고 재전송할 수 있습니다.
 - 카메라는 `camera.status` 이벤트를 처음 보낼 때 등록되고, 이후에는 상태가 갱신됩니다.
 - `door.closed`와 `clip.ready`가 원본 알림보다 먼저 도착하면 404를 받습니다. 원본 알림을 보낸 뒤 다시 보내면 됩니다.

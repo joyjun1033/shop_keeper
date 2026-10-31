@@ -2,9 +2,9 @@ import Ajv2020 from 'ajv/dist/2020'
 import { describe, expect, test } from 'vitest'
 import examples from '../contract/examples/events.json'
 import schema from '../contract/keeper.schema.json'
-import { createMockApi } from './api/mockApi'
+import { createPreviewApi } from './api/previewApi'
 import { getPresetPeriod } from './domain/rules'
-import { demoNow } from './data/mock'
+import { createFixtureApi, demoNow } from './test/fixtures'
 
 const ajv = new Ajv2020({ strict: false, allErrors: true })
 ajv.addSchema(schema)
@@ -15,14 +15,21 @@ function validator(definition: string) {
 
 describe('공유 데이터 계약', () => {
   test('화면이 쓰는 데이터 형식은 서버 응답 형식과 같다', async () => {
-    const dashboard = await createMockApi().getDashboard('2026-10-23T00:00:00+09:00')
+    const dashboard = await createFixtureApi().getDashboard('2026-10-23T00:00:00+09:00')
+    const validate = validator('Dashboard')
+
+    expect(validate(dashboard), JSON.stringify(validate.errors)).toBe(true)
+  })
+
+  test('미리보기의 빈 화면도 같은 형식이다', async () => {
+    const dashboard = await createPreviewApi().getDashboard('2026-10-23T00:00:00+09:00')
     const validate = validator('Dashboard')
 
     expect(validate(dashboard), JSON.stringify(validate.errors)).toBe(true)
   })
 
   test('리포트 데이터도 같은 알림 형식이다', async () => {
-    const alerts = await createMockApi().getAlerts(getPresetPeriod(7, demoNow))
+    const alerts = await createFixtureApi().getAlerts(getPresetPeriod(7, demoNow))
     const validate = validator('Alert')
 
     for (const alert of alerts) {

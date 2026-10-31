@@ -1,7 +1,8 @@
-import type { AlertItem, Camera, Clip, Inquiry, Period, Store } from '../domain/types'
+import type { AlertItem, Camera, Clip, Inquiry, Integration, Period, Store } from '../domain/types'
 
 export type Dashboard = {
   store: Store
+  integration: Integration
   cameras: Camera[]
   alerts: AlertItem[]
   clips: Clip[]

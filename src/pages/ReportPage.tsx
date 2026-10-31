@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PageHeader, StatRow } from '../components/common'
 import { DailyChart, DailyTable, TimeChart, TimeTable } from '../components/ReportCharts'
-import { reportRecommendation } from '../data/mock'
 import {
   getDailyTrend,
   getPeriodError,
@@ -28,7 +27,7 @@ function ReportResult({ alerts, period }: { alerts: AlertItem[]; period: Period 
   const stats = getReportStats(alerts, period)
   const dailyTrend = getDailyTrend(alerts, period)
   const timeTrend = getTimeTrend(alerts, period)
-  const summary = getReportSummary(stats, reportRecommendation)
+  const summary = getReportSummary(stats)
 
   return (
     <>
@@ -58,7 +57,7 @@ function ReportResult({ alerts, period }: { alerts: AlertItem[]; period: Period 
           </div>
         </div>
         {stats.detected === 0 ? (
-          <p className="empty-note">선택한 기간에 발생한 이벤트가 없습니다.</p>
+          <p className="empty-note">아직 집계된 이벤트가 없습니다.</p>
         ) : view === 'daily' ? (
           <>
             <DailyChart points={dailyTrend} />

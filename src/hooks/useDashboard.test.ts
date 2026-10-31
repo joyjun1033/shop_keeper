@@ -1,9 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { ApiError } from '../api/httpApi'
-import { createMockApi } from '../api/mockApi'
 import type { Dashboard, KeeperApi } from '../api/types'
-import { demoNow } from '../data/mock'
+import { createFixtureApi, demoNow } from '../test/fixtures'
 import { useDashboard } from './useDashboard'
 
 function unconfirmedCount(data: Dashboard | null) {
@@ -11,7 +10,7 @@ function unconfirmedCount(data: Dashboard | null) {
 }
 
 async function setup(overrides: Partial<KeeperApi> = {}, onUnauthorized = vi.fn()) {
-  const api = { ...createMockApi(), ...overrides }
+  const api = { ...createFixtureApi(), ...overrides }
   const view = renderHook(() => useDashboard(api, demoNow, { pollMs: 0, onUnauthorized }))
   await waitFor(() => expect(view.result.current.data).not.toBeNull())
   return { ...view, api, onUnauthorized }
@@ -46,9 +45,8 @@ test('문의 읽음 저장에 실패해도 화면을 되돌린다', async () => 
 })
 
 test('확인 처리 전에 출발한 조회 응답이 화면을 되돌리지 않는다', async () => {
-  const mock = createMockApi()
   let finishPoll: (value: Dashboard) => void = () => {}
-  const stale = await mock.getDashboard('since')
+  const stale = await createFixtureApi().getDashboard('since')
   const { result, api } = await setup()
 
   api.getDashboard = () => new Promise<Dashboard>((resolve) => (finishPoll = resolve))
@@ -74,7 +72,7 @@ test('로그인이 만료되면 알려주고 연결 실패로 표시하지 않�
 })
 
 test('다시 연결되면 실패 표시가 사라진다', async () => {
-  const getDashboard = vi.fn(createMockApi().getDashboard)
+  const getDashboard = vi.fn(createFixtureApi().getDashboard)
   const { result } = await setup({ getDashboard })
 
   getDashboard.mockRejectedValueOnce(new ApiError(0, 'down'))

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeeperApi } from './api/types'
 import BottomNav from './components/BottomNav'
-import { getClipView, getTodayClips } from './domain/rules'
+import { getClipView, getIntegrationNotice, getTodayClips } from './domain/rules'
 import { useDashboard } from './hooks/useDashboard'
 import { useNow } from './hooks/useNow'
 import AlertsPage from './pages/AlertsPage'
@@ -64,7 +64,10 @@ export default function OwnerApp({ api, startAt, pollMs, onUnauthorized, onLogou
     )
   }
 
-  const { store, cameras, alerts, clips, inquiries } = data
+  const { store, integration, cameras, alerts, clips, inquiries } = data
+  const notice = failed
+    ? '서버에 연결할 수 없습니다. 마지막으로 받은 내용을 보여주고 있어요.'
+    : getIntegrationNotice(integration, now)
 
   const goToTab = (next: TabId) => {
     setTab(next)
@@ -91,14 +94,21 @@ export default function OwnerApp({ api, startAt, pollMs, onUnauthorized, onLogou
 
   return (
     <div className="app">
-      {failed && (
+      {notice && (
         <p className="connection-banner" role="status">
-          서버에 연결할 수 없습니다. 마지막으로 받은 내용을 보여주고 있어요.
+          {notice}
         </p>
       )}
       <main className="screen" ref={screenRef}>
         {tab === 'home' && (
-          <HomePage store={store} alerts={alerts} inquiries={inquiries} now={now} onLogout={onLogout} />
+          <HomePage
+            store={store}
+            integration={integration}
+            alerts={alerts}
+            inquiries={inquiries}
+            now={now}
+            onLogout={onLogout}
+          />
         )}
         {tab === 'cctv' && (
           <CctvPage

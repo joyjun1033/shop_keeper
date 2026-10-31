@@ -35,7 +35,7 @@ export default function InquiriesPage({ inquiries, now, onRead }: Props) {
           </button>
         </section>
 
-        {inquiries.length === 0 && <p className="card empty-note">접수된 문의가 없습니다.</p>}
+        {inquiries.length === 0 && <p className="card empty-note">아직 접수된 문의가 없습니다.</p>}
         {inquiries.map((inquiry) => {
           const badge = getInquiryBadge(inquiry)
           const isOpen = openId === inquiry.id

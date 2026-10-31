@@ -2,7 +2,12 @@ export type Tone = 'red' | 'orange' | 'green' | 'blue'
 
 export type Store = {
   name: string
-  status: string
+}
+
+// waiting은 관리용 앱이 한 번도 연결된 적 없음, offline은 연결이 끊긴 상태
+export type Integration = {
+  status: 'waiting' | 'online' | 'offline'
+  lastSeenAt: string | null
 }
 
 export type AlertItem = {

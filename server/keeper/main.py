@@ -79,7 +79,7 @@ def create_app(db_path: str | Path | None = None, clock: Callable[[], datetime] 
         store_id: str = Depends(owner_store),
         conn: sqlite3.Connection = Depends(get_conn),
     ):
-        return repository.get_dashboard(conn, store_id, since)
+        return repository.get_dashboard(conn, store_id, since, clock())
 
     @app.get("/api/alerts")
     def alerts_in_period(
@@ -116,12 +116,22 @@ def create_app(db_path: str | Path | None = None, clock: Callable[[], datetime] 
         if not repository.mark_inquiry_read(conn, store_id, inquiry_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "문의를 찾을 수 없습니다.")
 
+    @app.post("/ingest/heartbeat", status_code=status.HTTP_204_NO_CONTENT)
+    def heartbeat(
+        x_device_key: str | None = Header(default=None),
+        _store_id: str = Depends(device_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        repository.mark_device_seen(conn, x_device_key, clock())
+
     @app.post("/ingest/events", status_code=status.HTTP_202_ACCEPTED)
     def ingest(
         event: IngestEvent,
+        x_device_key: str | None = Header(default=None),
         store_id: str = Depends(device_store),
         conn: sqlite3.Connection = Depends(get_conn),
     ):
+        repository.mark_device_seen(conn, x_device_key, clock())
         try:
             accepted = repository.ingest_event(conn, store_id, event)
         except repository.UnknownAlert:

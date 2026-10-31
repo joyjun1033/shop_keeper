@@ -8,6 +8,8 @@ import {
   getDailyTrend,
   getDoorStatus,
   getHomeStats,
+  getIntegrationBadge,
+  getIntegrationNotice,
   getInquiryBadge,
   getInquirySummary,
   getPeriodError,
@@ -21,10 +23,13 @@ import {
   getVisibleAlerts,
   markInquiryRead,
 } from './rules'
-import type { AlertItem, Camera, Inquiry, Period } from './types'
+import type { AlertItem, Camera, Inquiry, Integration, Period } from './types'
 
 const NOW = new Date('2026-10-23T15:00:00+09:00')
 const WEEK: Period = { start: '2026-10-17', end: '2026-10-23' }
+const ONLINE: Integration = { status: 'online', lastSeenAt: '2026-10-23T14:59:00+09:00' }
+const WAITING: Integration = { status: 'waiting', lastSeenAt: null }
+const OFFLINE: Integration = { status: 'offline', lastSeenAt: '2026-10-23T12:30:00+09:00' }
 
 function makeAlert(id: string, occurredAt: string, confirmed = false): AlertItem {
   return {
@@ -138,16 +143,53 @@ describe('확인 처리', () => {
   })
 })
 
+describe('관리용 앱 연결 상태', () => {
+  test('연결 전, 정상, 끊김을 서로 다른 배지로 보여준다', () => {
+    expect(getIntegrationBadge(WAITING).label).toBe('연동 대기')
+    expect(getIntegrationBadge(ONLINE).label).toBe('운영 정상')
+    expect(getIntegrationBadge(OFFLINE).label).toBe('연결 확인 필요')
+  })
+
+  test('연결 전에는 집계를 시작하지 않았다고 안내한다', () => {
+    expect(getIntegrationNotice(WAITING, NOW)).toContain('집계를 시작하지 않았습니다')
+  })
+
+  test('정상일 때는 안내가 없다', () => {
+    expect(getIntegrationNotice(ONLINE, NOW)).toBeNull()
+  })
+
+  test('끊기면 마지막 수신 시각을 알려준다', () => {
+    expect(getIntegrationNotice(OFFLINE, NOW)).toContain('마지막 수신(12:30)')
+  })
+
+  test('어제 끊겼으면 날짜도 함께 알려준다', () => {
+    const yesterday: Integration = { status: 'offline', lastSeenAt: '2026-10-22T23:10:00+09:00' }
+
+    expect(getIntegrationNotice(yesterday, NOW)).toContain('마지막 수신(10.22 23:10)')
+  })
+
+  test('마지막 수신 시각을 모르면 시각 없는 안내를 만들지 않는다', () => {
+    expect(getIntegrationNotice({ status: 'offline', lastSeenAt: null }, NOW)).toBeNull()
+  })
+})
+
 describe('오늘의 요약', () => {
   test('미확인 건수를 문구에 그대로 쓴다', () => {
-    expect(getTodaySummary(2).headline).toBe('미확인 이벤트 2건이 있습니다.')
+    expect(getTodaySummary(2, ONLINE).headline).toBe('미확인 이벤트 2건이 있습니다.')
   })
 
   test('미확인이 없으면 확인을 요청하지 않는다', () => {
-    const summary = getTodaySummary(0)
+    const summary = getTodaySummary(0, ONLINE)
 
     expect(summary.headline).toBe('미확인 이벤트가 없습니다.')
     expect(summary.detail).not.toContain('기록하세요')
+  })
+
+  test('연동 전에는 문제 없음이 아니라 집계 전이라고 말한다', () => {
+    const summary = getTodaySummary(0, WAITING)
+
+    expect(summary.headline).toBe('아직 집계된 데이터가 없습니다.')
+    expect(summary.headline).not.toContain('미확인 이벤트가 없습니다')
   })
 })
 
@@ -485,14 +527,17 @@ describe('리포트', () => {
   })
 
   test('요약 문구의 숫자는 집계 결과와 같다', () => {
-    expect(getReportSummary({ detected: 12, unconfirmed: 1 }, '점검 권장')).toEqual([
+    expect(getReportSummary({ detected: 12, unconfirmed: 1 })).toEqual([
       '선택한 기간의 이상행동 감지 이벤트 12건',
       '미확인 이벤트 1건 확인 필요',
-      '점검 권장',
     ])
   })
 
   test('미확인이 없으면 확인 요청 문구를 쓰지 않는다', () => {
-    expect(getReportSummary({ detected: 12, unconfirmed: 0 }, '점검 권장')[1]).toBe('미확인 이벤트 없음')
+    expect(getReportSummary({ detected: 12, unconfirmed: 0 })[1]).toBe('미확인 이벤트 없음')
+  })
+
+  test('이벤트가 없으면 집계된 내용이 없다고만 말한다', () => {
+    expect(getReportSummary({ detected: 0, unconfirmed: 0 })).toEqual(['선택한 기간에 집계된 이벤트가 없습니다.'])
   })
 })

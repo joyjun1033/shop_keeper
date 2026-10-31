@@ -1,17 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
 import { createHttpApi } from './api/httpApi'
-import { createMockApi } from './api/mockApi'
+import { createPreviewApi } from './api/previewApi'
 import { clearToken, readToken, saveToken } from './api/session'
-import { demoNow } from './data/mock'
 import OwnerApp from './OwnerApp'
 import LoginPage from './pages/LoginPage'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const POLL_MS = 10_000
 
-function MockApp() {
-  const [api] = useState(createMockApi)
-  return <OwnerApp api={api} startAt={demoNow} pollMs={0} />
+function PreviewApp() {
+  const [api] = useState(createPreviewApi)
+  const [startAt] = useState(() => new Date())
+  return <OwnerApp api={api} startAt={startAt} pollMs={0} />
 }
 
 function ServerApp() {
@@ -45,5 +45,5 @@ function ServerApp() {
 }
 
 export default function App({ dataSource = import.meta.env.VITE_DATA_SOURCE }: { dataSource?: string }) {
-  return dataSource === 'api' ? <ServerApp /> : <MockApp />
+  return dataSource === 'preview' ? <PreviewApp /> : <ServerApp />
 }

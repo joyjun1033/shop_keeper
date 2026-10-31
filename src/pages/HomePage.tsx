@@ -1,20 +1,22 @@
 import { Badge, PageHeader, StatRow } from '../components/common'
-import { getHomeStats, getRecentActivities, getTodaySummary } from '../domain/rules'
+import { getHomeStats, getIntegrationBadge, getRecentActivities, getTodaySummary } from '../domain/rules'
 import { formatKstDate } from '../domain/time'
-import type { AlertItem, Inquiry, Store } from '../domain/types'
+import type { AlertItem, Inquiry, Integration, Store } from '../domain/types'
 
 type Props = {
   store: Store
+  integration: Integration
   alerts: AlertItem[]
   inquiries: Inquiry[]
   now: Date
   onLogout?: () => void
 }
 
-export default function HomePage({ store, alerts, inquiries, now, onLogout }: Props) {
+export default function HomePage({ store, integration, alerts, inquiries, now, onLogout }: Props) {
   const stats = getHomeStats(alerts, inquiries, now)
   const activities = getRecentActivities(alerts, now)
-  const summary = getTodaySummary(stats.unconfirmedAlerts)
+  const summary = getTodaySummary(stats.unconfirmedAlerts, integration)
+  const badge = getIntegrationBadge(integration)
 
   return (
     <>
@@ -25,7 +27,7 @@ export default function HomePage({ store, alerts, inquiries, now, onLogout }: Pr
             <h2>{store.name}</h2>
             <p className="caption">{formatKstDate(now)} · 실시간 운영 현황</p>
           </div>
-          <Badge tone="green">{store.status}</Badge>
+          <Badge tone={badge.tone}>{badge.label}</Badge>
         </section>
 
         <StatRow
@@ -38,18 +40,22 @@ export default function HomePage({ store, alerts, inquiries, now, onLogout }: Pr
 
         <section className="card">
           <h2>최근 활동</h2>
-          <ul className="activity-list">
-            {activities.map((activity) => (
-              <li key={activity.id}>
-                <span className={`dot dot--${activity.tone}`} aria-hidden />
-                <div className="activity-list__text">
-                  <strong>{activity.title}</strong>
-                  <span className="caption">{activity.status}</span>
-                </div>
-                <time className="caption">{activity.time}</time>
-              </li>
-            ))}
-          </ul>
+          {activities.length === 0 ? (
+            <p className="empty-note">아직 집계된 활동이 없습니다.</p>
+          ) : (
+            <ul className="activity-list">
+              {activities.map((activity) => (
+                <li key={activity.id}>
+                  <span className={`dot dot--${activity.tone}`} aria-hidden />
+                  <div className="activity-list__text">
+                    <strong>{activity.title}</strong>
+                    <span className="caption">{activity.status}</span>
+                  </div>
+                  <time className="caption">{activity.time}</time>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="card">

@@ -17,6 +17,8 @@ from .schemas import (
 
 KST = timezone(timedelta(hours=9))
 RECENT_ALERT_COUNT = 3
+# 관리용 앱은 1분마다 신호를 보낸다. 5분 동안 없으면 끊긴 것으로 본다
+OFFLINE_AFTER = timedelta(minutes=5)
 
 ALERT_PRESENTATION = {
     "movement": {"label": "이상 행동 감지", "tone": "red", "title": "상품 이동 감지"},
@@ -34,7 +36,7 @@ def create_store(conn: sqlite3.Connection, name: str, email: str, password: str)
     store_id = uuid4().hex
     device_key = security.new_secret()
     with transaction(conn):
-        conn.execute("INSERT INTO stores (id, name, status) VALUES (?, ?, '운영 정상')", (store_id, name))
+        conn.execute("INSERT INTO stores (id, name) VALUES (?, ?)", (store_id, name))
         conn.execute(
             "INSERT INTO owners (store_id, email, password_hash) VALUES (?, ?, ?)",
             (store_id, email, security.hash_password(password)),
@@ -83,6 +85,27 @@ def store_for_device(conn: sqlite3.Connection, device_key: str) -> str | None:
         (security.hash_secret(device_key),),
     ).fetchone()
     return row["store_id"] if row else None
+
+
+def mark_device_seen(conn: sqlite3.Connection, device_key: str, now: datetime) -> None:
+    conn.execute(
+        "UPDATE devices SET last_seen_at = ? WHERE key_hash = ?",
+        (now.timestamp(), security.hash_secret(device_key)),
+    )
+
+
+def _integration_view(conn: sqlite3.Connection, store_id: str, now: datetime) -> dict:
+    last_seen = conn.execute(
+        "SELECT MAX(last_seen_at) AS last_seen FROM devices WHERE store_id = ?",
+        (store_id,),
+    ).fetchone()["last_seen"]
+    if last_seen is None:
+        return {"status": "waiting", "lastSeenAt": None}
+    seen_at = datetime.fromtimestamp(last_seen, KST)
+    return {
+        "status": "online" if now - seen_at <= OFFLINE_AFTER else "offline",
+        "lastSeenAt": seen_at.isoformat(),
+    }
 
 
 def _insert_alert(conn, store_id: str, event, kind: str, details: dict) -> None:
@@ -202,10 +225,10 @@ def _inquiry_view(row: sqlite3.Row) -> dict:
     }
 
 
-def get_dashboard(conn: sqlite3.Connection, store_id: str, since: datetime) -> dict:
+def get_dashboard(conn: sqlite3.Connection, store_id: str, since: datetime, now: datetime) -> dict:
     """since 이후 항목, 아직 처리하지 않은 항목, 최근 활동에 쓸 최신 알림을 돌려준다."""
     since_ts = since.timestamp()
-    store = conn.execute("SELECT name, status FROM stores WHERE id = ?", (store_id,)).fetchone()
+    store = conn.execute("SELECT name FROM stores WHERE id = ?", (store_id,)).fetchone()
     cameras = conn.execute(
         "SELECT id, name, location, status FROM cameras WHERE store_id = ? ORDER BY name, id",
         (store_id,),
@@ -234,6 +257,7 @@ def get_dashboard(conn: sqlite3.Connection, store_id: str, since: datetime) -> d
     ).fetchall()
     return {
         "store": dict(store),
+        "integration": _integration_view(conn, store_id, now),
         "cameras": [dict(row) for row in cameras],
         "alerts": [_alert_view(row) for row in alerts],
         "clips": [
