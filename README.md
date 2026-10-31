@@ -47,10 +47,18 @@ python -m venv .venv
 npm run dev
 ```
 
-관리용 앱이 아직 없을 때는 `server` 폴더에서 아래 명령으로 시험 이벤트를 보내 연동 흐름을 확인할 수 있습니다. 실제 매장 데이터가 아니므로 개발 중에만 씁니다.
+### 시뮬레이터
+
+관리용 앱이 아직 없을 때는 `server` 폴더에서 시뮬레이터로 연동 흐름을 시험합니다. 실제 관리용 앱과 같은 경로로 이상행동, 문의, 카메라 끊김과 복구, 재전송을 약 1분에 걸쳐 보냅니다. 실제 매장 데이터가 아니므로 개발 중에만 씁니다.
 
 ```bash
-.venv/Scripts/python send_sample_events.py
+.venv/Scripts/python simulator.py
+```
+
+`--speed 5`로 빠르게 실행하고, `--stay`로 끝난 뒤에도 연결을 유지할 수 있습니다. 시험 데이터를 지우고 연동 전 상태로 돌아가려면 아래 명령을 실행합니다. 매장과 계정은 남습니다.
+
+```bash
+.venv/Scripts/python clear_dev_data.py
 ```
 
 ## 테스트

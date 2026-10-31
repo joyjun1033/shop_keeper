@@ -1,6 +1,5 @@
 """서버가 contract/keeper.schema.json과 같은 형식을 쓰는지 검증한다."""
 
-from datetime import UTC, datetime
 from typing import get_args
 
 import pytest
@@ -94,17 +93,6 @@ def test_dashboard_before_integration_matches_the_schema(schema, store):
     dashboard = store.dashboard(store.login())
 
     validator_for(schema, "Dashboard").validate(dashboard)
-
-
-def test_sample_events_match_the_schema(schema):
-    from send_sample_events import build_events
-
-    validator = validator_for(schema, "IngestEvent")
-    events = build_events(datetime(2026, 10, 23, 6, 0, tzinfo=UTC))
-
-    for event in events:
-        validator.validate(event)
-    assert len({event["eventId"] for event in events}) == len(events)
 
 
 def test_clip_helper_is_a_valid_event(schema):
