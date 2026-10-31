@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { formatEventTime, formatKstDate, formatKstTime, formatPeriod, kstDay, listDays } from './time'
+import {
+  formatEventTime,
+  formatKstDate,
+  formatKstTime,
+  formatPeriod,
+  kstDay,
+  kstHour,
+  listDays,
+  shiftDay,
+} from './time'
 
 const NOW = new Date('2026-10-23T15:00:00+09:00')
 
@@ -11,6 +20,16 @@ describe('한국 시간 변환', () => {
 
   test('자정은 24시가 아니라 00시로 표시한다', () => {
     expect(formatKstTime('2026-10-22T15:05:00Z')).toBe('00:05')
+  })
+
+  test('시는 한국 시간 기준 숫자로 돌려준다', () => {
+    expect(kstHour('2026-10-22T15:05:00Z')).toBe(0)
+    expect(kstHour('2026-10-23T14:59:00Z')).toBe(23)
+  })
+
+  test('날짜를 앞뒤로 옮길 수 있다', () => {
+    expect(shiftDay('2026-10-01', -1)).toBe('2026-09-30')
+    expect(shiftDay('2026-12-31', 1)).toBe('2027-01-01')
   })
 
   test('날짜를 시안의 형식으로 표시한다', () => {

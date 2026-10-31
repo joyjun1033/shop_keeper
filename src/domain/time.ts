@@ -24,6 +24,14 @@ export function formatKstTime(value: Date | string): string {
   return timeFormat.format(new Date(value))
 }
 
+export function kstHour(value: Date | string): number {
+  return Number(formatKstTime(value).slice(0, 2))
+}
+
+export function shiftDay(day: string, delta: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + delta * DAY_MS).toISOString().slice(0, 10)
+}
+
 export function formatKstDate(value: Date | string): string {
   return kstDay(value).replaceAll('-', '. ')
 }

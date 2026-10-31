@@ -1,6 +1,18 @@
-import { ArrowRight, ChevronRight, DoorClosed, Maximize, Package, PackageX, Play, Video, Volume2 } from 'lucide-react'
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  DoorClosed,
+  Maximize,
+  Package,
+  PackageX,
+  Play,
+  Video,
+  VideoOff,
+  Volume2,
+} from 'lucide-react'
 import { PageHeader } from '../components/common'
-import { getActiveCamera } from '../domain/rules'
+import { getActiveCamera, getAdjacentCameraId } from '../domain/rules'
 import type { Camera, ClipView } from '../domain/types'
 
 const clipIcons: Record<ClipView['kind'], typeof Package> = {
@@ -9,15 +21,46 @@ const clipIcons: Record<ClipView['kind'], typeof Package> = {
   product: PackageX,
 }
 
+function formatOrder(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function ConnectionBadge({ status }: { status: Camera['status'] }) {
+  const connected = status === 'connected'
+  return (
+    <span className={connected ? 'badge badge--green' : 'badge badge--red'}>
+      <span className={connected ? 'dot dot--green' : 'dot dot--red'} aria-hidden />
+      {connected ? '연결됨' : '연결 끊김'}
+    </span>
+  )
+}
+
 type Props = {
   cameras: Camera[]
   clips: ClipView[]
   cameraId: string | null
+  activeClip: ClipView | null
   onSelectCamera: (id: string) => void
+  onPlayClip: (id: string) => void
+  onBackToLive: () => void
 }
 
-export default function CctvPage({ cameras, clips, cameraId, onSelectCamera }: Props) {
+export default function CctvPage({
+  cameras,
+  clips,
+  cameraId,
+  activeClip,
+  onSelectCamera,
+  onPlayClip,
+  onBackToLive,
+}: Props) {
   const active = getActiveCamera(cameras, cameraId)
+  const connected = active?.camera.status === 'connected'
+
+  const moveCamera = (step: 1 | -1) => {
+    const next = getAdjacentCameraId(cameras, cameraId, step)
+    if (next) onSelectCamera(next)
+  }
 
   return (
     <>
@@ -25,27 +68,67 @@ export default function CctvPage({ cameras, clips, cameraId, onSelectCamera }: P
       <div className="page-body">
         {active ? (
           <>
-            <section className="player" aria-label={`${active.camera.name} 실시간 영상`}>
+            <section className="player" aria-label={`${active.camera.name} 영상`}>
               <div className="player__top">
                 <span className="player__pill">
-                  {active.camera.name} · {active.camera.location}
+                  {activeClip ? `클립 · ${activeClip.title}` : `${active.camera.name} · ${active.camera.location}`}
                 </span>
-                <span className="player__pill player__pill--live">
-                  <span className="dot dot--green" aria-hidden />
-                  실시간
-                </span>
+                {activeClip ? (
+                  <button type="button" className="player__pill player__pill--live" onClick={onBackToLive}>
+                    실시간으로 돌아가기
+                  </button>
+                ) : (
+                  <span className="player__pill player__pill--live">
+                    <span className={connected ? 'dot dot--green' : 'dot dot--red'} aria-hidden />
+                    {connected ? '실시간' : '연결 끊김'}
+                  </span>
+                )}
               </div>
               <div className="player__stage">
-                <Video size={34} fill="currentColor" strokeWidth={1.5} aria-hidden />
-                <span>CCTV 화면</span>
+                {activeClip ? (
+                  <>
+                    <Play size={32} fill="currentColor" strokeWidth={1.5} aria-hidden />
+                    <span>클립 재생 화면</span>
+                  </>
+                ) : connected ? (
+                  <>
+                    <Video size={34} fill="currentColor" strokeWidth={1.5} aria-hidden />
+                    <span>CCTV 화면</span>
+                  </>
+                ) : (
+                  <>
+                    <VideoOff size={34} strokeWidth={1.6} aria-hidden />
+                    <span>연결이 끊겼습니다</span>
+                  </>
+                )}
+                {!activeClip && cameras.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="player__arrow player__arrow--prev"
+                      aria-label="이전 카메라"
+                      onClick={() => moveCamera(-1)}
+                    >
+                      <ChevronLeft size={20} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      className="player__arrow player__arrow--next"
+                      aria-label="다음 카메라"
+                      onClick={() => moveCamera(1)}
+                    >
+                      <ChevronRight size={20} aria-hidden />
+                    </button>
+                  </>
+                )}
               </div>
               <div className="player__bar">
                 <span className="player__live">
                   <span className="player__rec" aria-hidden />
-                  라이브
+                  {activeClip ? activeClip.duration : connected ? '라이브' : '대기 중'}
                 </span>
                 <span>
-                  카메라 {String(active.index + 1).padStart(2, '0')} / {String(cameras.length).padStart(2, '0')}
+                  카메라 {formatOrder(active.index + 1)} / {formatOrder(cameras.length)}
                 </span>
                 <span className="player__controls">
                   <button type="button" aria-label="소리">
@@ -72,10 +155,7 @@ export default function CctvPage({ cameras, clips, cameraId, onSelectCamera }: P
                       <Video size={16} fill="currentColor" strokeWidth={1.5} aria-hidden />
                       <strong>{item.name}</strong>
                       <span className="camera-list__location">{item.location}</span>
-                      <span className="badge badge--green">
-                        <span className="dot dot--green" aria-hidden />
-                        연결됨
-                      </span>
+                      <ConnectionBadge status={item.status} />
                       <ChevronRight size={15} aria-hidden />
                     </button>
                   </li>
@@ -100,29 +180,33 @@ export default function CctvPage({ cameras, clips, cameraId, onSelectCamera }: P
             </button>
           </div>
           <p className="caption">AI가 감지한 주요 상황을 영상으로 바로 확인하세요.</p>
-          <ul className="clip-grid">
-            {clips.map((clip) => {
-              const Icon = clipIcons[clip.kind]
-              const clipCamera = cameras.find((item) => item.id === clip.cameraId)
-              return (
-                <li key={clip.id}>
-                  <button type="button" onClick={() => onSelectCamera(clip.cameraId)}>
-                    <span className={`clip-thumb clip-thumb--${clip.kind}`}>
-                      <Icon size={36} strokeWidth={1.4} fill="currentColor" fillOpacity={0.35} aria-hidden />
-                      <span className="clip-thumb__duration">
-                        <Play size={8} fill="currentColor" aria-hidden />
-                        {clip.duration}
+          {clips.length === 0 ? (
+            <p className="empty-note">오늘 감지된 클립이 없습니다.</p>
+          ) : (
+            <ul className="clip-grid">
+              {clips.map((clip) => {
+                const Icon = clipIcons[clip.kind]
+                const clipCamera = cameras.find((item) => item.id === clip.cameraId)
+                return (
+                  <li key={clip.id}>
+                    <button type="button" onClick={() => onPlayClip(clip.id)}>
+                      <span className={`clip-thumb clip-thumb--${clip.kind}`}>
+                        <Icon size={36} strokeWidth={1.4} fill="currentColor" fillOpacity={0.35} aria-hidden />
+                        <span className="clip-thumb__duration">
+                          <Play size={8} fill="currentColor" aria-hidden />
+                          {clip.duration}
+                        </span>
                       </span>
-                    </span>
-                    <strong>{clip.title}</strong>
-                    <span className="caption">
-                      오늘 {clip.time} · {clipCamera?.name ?? '삭제된 카메라'}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                      <strong>{clip.title}</strong>
+                      <span className="caption">
+                        오늘 {clip.time} · {clipCamera?.name ?? '삭제된 카메라'}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </section>
       </div>
     </>

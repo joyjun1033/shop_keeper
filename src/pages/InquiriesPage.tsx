@@ -1,10 +1,23 @@
+import { useState } from 'react'
 import { Badge, LinkButton, PageHeader } from '../components/common'
-import { demoNow, inquiries } from '../data/mock'
 import { getInquiryBadge, getInquirySummary } from '../domain/rules'
 import { formatEventTime } from '../domain/time'
+import type { Inquiry } from '../domain/types'
 
-export default function InquiriesPage() {
-  const summary = getInquirySummary(inquiries, demoNow)
+type Props = {
+  inquiries: Inquiry[]
+  now: Date
+  onRead: (id: string) => void
+}
+
+export default function InquiriesPage({ inquiries, now, onRead }: Props) {
+  const [openId, setOpenId] = useState<string | null>(null)
+  const summary = getInquirySummary(inquiries, now)
+
+  const toggle = (id: string) => {
+    setOpenId(openId === id ? null : id)
+    onRead(id)
+  }
 
   return (
     <>
@@ -22,17 +35,28 @@ export default function InquiriesPage() {
           </button>
         </section>
 
+        {inquiries.length === 0 && <p className="card empty-note">접수된 문의가 없습니다.</p>}
         {inquiries.map((inquiry) => {
           const badge = getInquiryBadge(inquiry)
+          const isOpen = openId === inquiry.id
           return (
             <article className="card notice" key={inquiry.id}>
               <div className="notice__head">
                 <Badge tone={badge.tone}>{badge.label}</Badge>
-                <time className="caption">{formatEventTime(inquiry.occurredAt, demoNow)}</time>
+                <time className="caption">{formatEventTime(inquiry.occurredAt, now)}</time>
               </div>
               <h2 className="notice__title">{inquiry.title}</h2>
               <p className="note-box">{inquiry.note}</p>
-              <LinkButton>상담 내용 확인</LinkButton>
+              {isOpen && (
+                <ul className="transcript">
+                  {inquiry.transcript.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              <LinkButton expanded={isOpen} onClick={() => toggle(inquiry.id)}>
+                {isOpen ? '상담 내용 닫기' : '상담 내용 확인'}
+              </LinkButton>
             </article>
           )
         })}

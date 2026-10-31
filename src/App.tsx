@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import BottomNav from './components/BottomNav'
-import { alerts, cameras, clips, demoNow } from './data/mock'
-import { getTodayClips } from './domain/rules'
+import { alerts as initialAlerts, cameras, clips, demoNow, inquiries as initialInquiries } from './data/mock'
+import { confirmAlert, getClipView, getTodayClips, markInquiryRead } from './domain/rules'
+import { useNow } from './hooks/useNow'
 import AlertsPage from './pages/AlertsPage'
 import CctvPage from './pages/CctvPage'
 import HomePage from './pages/HomePage'
@@ -15,8 +16,12 @@ function tabFromHash(): TabId {
 }
 
 export default function App() {
+  const now = useNow(demoNow)
   const [tab, setTab] = useState<TabId>(tabFromHash)
+  const [alerts, setAlerts] = useState(initialAlerts)
+  const [inquiries, setInquiries] = useState(initialInquiries)
   const [cameraId, setCameraId] = useState(cameras[0]?.id ?? null)
+  const [clipId, setClipId] = useState<string | null>(null)
   const screenRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -34,26 +39,56 @@ export default function App() {
     window.location.hash = next
   }
 
-  const openCamera = (id: string) => {
+  const selectCamera = (id: string) => {
     setCameraId(id)
+    setClipId(null)
+  }
+
+  const playClip = (id: string) => {
+    const view = getClipView(clips.find((clip) => clip.id === id)!, alerts, now)
+    setCameraId(view?.cameraId ?? cameraId)
+    setClipId(id)
+  }
+
+  const openAlertClip = (alertId: string) => {
+    playClip(clips.find((clip) => clip.alertId === alertId)!.id)
     goToTab('cctv')
   }
+
+  const activeClip = clips.find((clip) => clip.id === clipId)
 
   return (
     <div className="app">
       <main className="screen" ref={screenRef}>
-        {tab === 'home' && <HomePage />}
+        {tab === 'home' && <HomePage alerts={alerts} inquiries={inquiries} now={now} />}
         {tab === 'cctv' && (
           <CctvPage
             cameras={cameras}
-            clips={getTodayClips(clips, alerts, demoNow)}
+            clips={getTodayClips(clips, alerts, now)}
             cameraId={cameraId}
-            onSelectCamera={setCameraId}
+            activeClip={activeClip ? getClipView(activeClip, alerts, now) : null}
+            onSelectCamera={selectCamera}
+            onPlayClip={playClip}
+            onBackToLive={() => setClipId(null)}
           />
         )}
-        {tab === 'alerts' && <AlertsPage onOpenCamera={openCamera} />}
-        {tab === 'inquiries' && <InquiriesPage />}
-        {tab === 'report' && <ReportPage />}
+        {tab === 'alerts' && (
+          <AlertsPage
+            alerts={alerts}
+            clips={clips}
+            now={now}
+            onConfirm={(id) => setAlerts((current) => confirmAlert(current, id))}
+            onOpenClip={openAlertClip}
+          />
+        )}
+        {tab === 'inquiries' && (
+          <InquiriesPage
+            inquiries={inquiries}
+            now={now}
+            onRead={(id) => setInquiries((current) => markInquiryRead(current, id))}
+          />
+        )}
+        {tab === 'report' && <ReportPage alerts={alerts} now={now} />}
       </main>
       <BottomNav active={tab} onChange={goToTab} />
     </div>

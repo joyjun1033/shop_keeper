@@ -1,11 +1,18 @@
 import { Badge, PageHeader, StatRow } from '../components/common'
-import { alerts, demoNow, inquiries, store } from '../data/mock'
+import { store } from '../data/mock'
 import { getHomeStats, getRecentActivities, getTodaySummary } from '../domain/rules'
 import { formatKstDate } from '../domain/time'
+import type { AlertItem, Inquiry } from '../domain/types'
 
-export default function HomePage() {
-  const stats = getHomeStats(alerts, inquiries, demoNow)
-  const activities = getRecentActivities(alerts, demoNow)
+type Props = {
+  alerts: AlertItem[]
+  inquiries: Inquiry[]
+  now: Date
+}
+
+export default function HomePage({ alerts, inquiries, now }: Props) {
+  const stats = getHomeStats(alerts, inquiries, now)
+  const activities = getRecentActivities(alerts, now)
   const summary = getTodaySummary(stats.unconfirmedAlerts)
 
   return (
@@ -15,7 +22,7 @@ export default function HomePage() {
         <section className="card store-card">
           <div>
             <h2>{store.name}</h2>
-            <p className="caption">{formatKstDate(demoNow)} · 실시간 운영 현황</p>
+            <p className="caption">{formatKstDate(now)} · 실시간 운영 현황</p>
           </div>
           <Badge tone="green">{store.status}</Badge>
         </section>

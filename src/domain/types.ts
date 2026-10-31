@@ -9,15 +9,18 @@ export type AlertItem = {
   cameraId: string
   confirmed: boolean
 } & (
-  | { kind: 'movement'; from: string; to: string }
-  | { kind: 'duration'; progress: number; elapsed: string }
-  | { kind: 'product'; product: string }
+  | { kind: 'movement'; from: string; to: string; unpaid: boolean }
+  | { kind: 'duration'; openedAt: string; closedAt: string | null; limitMinutes: number }
+  | { kind: 'product'; product: string | null }
 )
+
+export type AlertKind = AlertItem['kind']
 
 export type Camera = {
   id: string
   name: string
   location: string
+  status: 'connected' | 'disconnected'
 }
 
 export type Clip = {
@@ -28,7 +31,7 @@ export type Clip = {
 
 export type ClipView = {
   id: string
-  kind: AlertItem['kind']
+  kind: AlertKind
   title: string
   time: string
   cameraId: string
@@ -39,6 +42,7 @@ export type Inquiry = {
   id: string
   title: string
   note: string
+  transcript: string[]
   occurredAt: string
   status: 'forwarded' | 'ai_resolved'
   read: boolean

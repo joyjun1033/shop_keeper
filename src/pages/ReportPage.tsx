@@ -1,21 +1,102 @@
-import type { CSSProperties } from 'react'
+import { useState } from 'react'
 import { PageHeader, StatRow } from '../components/common'
-import { alerts, weeklyPeriod, weeklyReport } from '../data/mock'
-import { getDailyTrend, getReportStats, getReportSummary } from '../domain/rules'
-import { formatPeriod } from '../domain/time'
+import { DailyChart, DailyTable, TimeChart, TimeTable } from '../components/ReportCharts'
+import { reportRecommendation } from '../data/mock'
+import {
+  getDailyTrend,
+  getPeriodError,
+  getPresetPeriod,
+  getReportStats,
+  getReportSummary,
+  getTimeTrend,
+} from '../domain/rules'
+import { formatPeriod, kstDay } from '../domain/time'
+import type { AlertItem, Period } from '../domain/types'
 
-export default function ReportPage() {
-  const stats = getReportStats(alerts, weeklyPeriod)
-  const trend = getDailyTrend(alerts, weeklyPeriod)
-  const summary = getReportSummary(stats, weeklyReport.recommendation)
+const presets = [
+  { label: '주간', days: 7 },
+  { label: '월간', days: 30 },
+]
+
+const chartViews = [
+  { id: 'daily', label: '일별' },
+  { id: 'time', label: '시간대별' },
+] as const
+
+type Props = {
+  alerts: AlertItem[]
+  now: Date
+}
+
+export default function ReportPage({ alerts, now }: Props) {
+  const [period, setPeriod] = useState<Period>(() => getPresetPeriod(7, now))
+  const [draft, setDraft] = useState(period)
+  const [view, setView] = useState<'daily' | 'time'>('daily')
+
+  const error = getPeriodError(draft, now)
+  const stats = getReportStats(alerts, period)
+  const dailyTrend = getDailyTrend(alerts, period)
+  const timeTrend = getTimeTrend(alerts, period)
+  const summary = getReportSummary(stats, reportRecommendation)
+
+  const changePeriod = (next: Period) => {
+    setDraft(next)
+    if (!getPeriodError(next, now)) setPeriod(next)
+  }
+
+  const isPresetActive = (days: number) => {
+    const preset = getPresetPeriod(days, now)
+    return preset.start === period.start && preset.end === period.end
+  }
 
   return (
     <>
-      <PageHeader title="AI 매장 점검 리포트" subtitle="일주일의 주요 상황을 정리했어요" />
+      <PageHeader title="AI 매장 점검 리포트" subtitle="선택한 기간의 주요 상황을 정리했어요" />
       <div className="page-body">
-        <section className="card split-card">
-          <strong className="period">{formatPeriod(weeklyPeriod)}</strong>
-          <span className="pill-button">{weeklyReport.range}</span>
+        <section className="card period-card">
+          <div className="split-card">
+            <strong className="period">{formatPeriod(period)}</strong>
+            <div className="pill-group">
+              {presets.map((preset) => (
+                <button
+                  type="button"
+                  key={preset.label}
+                  className="pill-button"
+                  aria-pressed={isPresetActive(preset.days)}
+                  onClick={() => changePeriod(getPresetPeriod(preset.days, now))}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="date-fields">
+            <label htmlFor="report-start">
+              시작일
+              <input
+                id="report-start"
+                type="date"
+                value={draft.start}
+                max={kstDay(now)}
+                onChange={(event) => changePeriod({ ...draft, start: event.target.value })}
+              />
+            </label>
+            <label htmlFor="report-end">
+              종료일
+              <input
+                id="report-end"
+                type="date"
+                value={draft.end}
+                max={kstDay(now)}
+                onChange={(event) => changePeriod({ ...draft, end: event.target.value })}
+              />
+            </label>
+          </div>
+          {error && (
+            <p className="field-error" role="alert">
+              {error}
+            </p>
+          )}
         </section>
 
         <StatRow
@@ -27,19 +108,35 @@ export default function ReportPage() {
         />
 
         <section className="card">
-          <h2>알림 이벤트 발생 추이</h2>
-          <ol className="bar-chart" aria-label="일별 이벤트 수">
-            {trend.map((point) => (
-              <li key={point.date}>
-                <span className="bar-chart__value">{point.count}건</span>
-                <span
-                  className={point.isPeak ? 'bar-chart__bar is-highlight' : 'bar-chart__bar'}
-                  style={{ '--ratio': point.ratio } as CSSProperties}
-                />
-                <span className="bar-chart__day">{point.label}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="card__head">
+            <h2>알림 이벤트 발생 추이</h2>
+            <div className="pill-group">
+              {chartViews.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className="pill-button"
+                  aria-pressed={view === item.id}
+                  onClick={() => setView(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {stats.detected === 0 ? (
+            <p className="empty-note">선택한 기간에 발생한 이벤트가 없습니다.</p>
+          ) : view === 'daily' ? (
+            <>
+              <DailyChart points={dailyTrend} />
+              <DailyTable points={dailyTrend} />
+            </>
+          ) : (
+            <>
+              <TimeChart points={timeTrend} />
+              <TimeTable points={timeTrend} />
+            </>
+          )}
         </section>
 
         <section className="card">

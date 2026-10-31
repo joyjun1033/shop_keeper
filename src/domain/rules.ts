@@ -1,5 +1,16 @@
-import { formatEventTime, kstDay, listDays } from './time'
-import type { AlertItem, Camera, Clip, ClipView, Inquiry, Period, Tone } from './types'
+import { formatEventTime, kstDay, kstHour, listDays, shiftDay } from './time'
+import type { AlertItem, AlertKind, Camera, Clip, ClipView, Inquiry, Period, Tone } from './types'
+
+const MAX_PERIOD_DAYS = 31
+const SLOT_HOURS = 4
+
+export const alertKinds: AlertKind[] = ['movement', 'duration', 'product']
+
+export const alertKindLabels: Record<AlertKind, string> = {
+  movement: '상품 이동',
+  duration: '문 개방',
+  product: '상품 훼손',
+}
 
 function newestFirst<T extends { occurredAt: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
@@ -16,6 +27,34 @@ function needsOwner(inquiry: Inquiry): boolean {
 function inPeriod(alert: AlertItem, { start, end }: Period): boolean {
   const day = kstDay(alert.occurredAt)
   return start <= day && day <= end
+}
+
+function withScale<T extends { count: number }>(points: T[]) {
+  const max = Math.max(0, ...points.map((point) => point.count))
+  return points.map((point) => ({
+    ...point,
+    ratio: max === 0 ? 0 : point.count / max,
+    isPeak: max > 0 && point.count === max,
+  }))
+}
+
+function toClipView(clip: Clip, alert: AlertItem, now: Date): ClipView {
+  return {
+    id: clip.id,
+    kind: alert.kind,
+    title: alert.title,
+    time: formatEventTime(alert.occurredAt, now),
+    cameraId: alert.cameraId,
+    duration: clip.duration,
+  }
+}
+
+export function confirmAlert(alerts: AlertItem[], id: string): AlertItem[] {
+  return alerts.map((alert) => (alert.id === id ? { ...alert, confirmed: true } : alert))
+}
+
+export function markInquiryRead(inquiries: Inquiry[], id: string): Inquiry[] {
+  return inquiries.map((inquiry) => (inquiry.id === id ? { ...inquiry, read: true } : inquiry))
 }
 
 export function getHomeStats(alerts: AlertItem[], inquiries: Inquiry[], now: Date) {
@@ -56,22 +95,32 @@ export function getVisibleAlerts(alerts: AlertItem[], now: Date): AlertItem[] {
   return newestFirst(alerts.filter((alert) => !alert.confirmed || isToday(alert.occurredAt, now)))
 }
 
-export function getTodayClips(clips: Clip[], alerts: AlertItem[], now: Date): ClipView[] {
-  const views: (ClipView & { occurredAt: string })[] = []
-  for (const clip of clips) {
-    const alert = alerts.find((item) => item.id === clip.alertId)
-    if (!alert || !isToday(alert.occurredAt, now)) continue
-    views.push({
-      id: clip.id,
-      kind: alert.kind,
-      title: alert.title,
-      time: formatEventTime(alert.occurredAt, now),
-      cameraId: alert.cameraId,
-      duration: clip.duration,
-      occurredAt: alert.occurredAt,
-    })
+// 상품 이동은 미결제로 판단된 경우에만 정황과 클립을 보여준다
+export function canViewClip(alert: AlertItem, clips: Clip[]): boolean {
+  if (alert.kind === 'movement' && !alert.unpaid) return false
+  return clips.some((clip) => clip.alertId === alert.id)
+}
+
+export function getDoorStatus(alert: Extract<AlertItem, { kind: 'duration' }>, now: Date) {
+  const end = alert.closedAt ? Date.parse(alert.closedAt) : now.getTime()
+  const elapsedMinutes = Math.max(0, Math.floor((end - Date.parse(alert.openedAt)) / 60_000))
+  return {
+    isOpen: alert.closedAt === null,
+    elapsedMinutes,
+    progress: Math.min(100, Math.round((elapsedMinutes / alert.limitMinutes) * 100)),
+    label: alert.closedAt === null ? `${elapsedMinutes}분 경과` : `${elapsedMinutes}분 개방 후 닫힘`,
   }
-  return newestFirst(views).map(({ occurredAt: _occurredAt, ...view }) => view)
+}
+
+export function getClipView(clip: Clip, alerts: AlertItem[], now: Date): ClipView | null {
+  const alert = alerts.find((item) => item.id === clip.alertId)
+  return alert ? toClipView(clip, alert, now) : null
+}
+
+export function getTodayClips(clips: Clip[], alerts: AlertItem[], now: Date): ClipView[] {
+  return newestFirst(alerts.filter((alert) => isToday(alert.occurredAt, now))).flatMap((alert) =>
+    clips.filter((clip) => clip.alertId === alert.id).map((clip) => toClipView(clip, alert, now)),
+  )
 }
 
 // 선택했던 카메라가 사라지면 첫 번째 카메라를 보여준다
@@ -82,6 +131,13 @@ export function getActiveCamera(cameras: Camera[], cameraId: string | null) {
     0,
   )
   return { camera: cameras[index], index }
+}
+
+// 끝에 닿으면 반대쪽 끝으로 돌아간다
+export function getAdjacentCameraId(cameras: Camera[], cameraId: string | null, step: 1 | -1): string | null {
+  const active = getActiveCamera(cameras, cameraId)
+  if (!active) return null
+  return cameras[(active.index + step + cameras.length) % cameras.length].id
 }
 
 export function getInquirySummary(inquiries: Inquiry[], now: Date) {
@@ -100,6 +156,19 @@ export function getInquiryBadge(inquiry: Inquiry): { label: string; tone: Tone }
   return { label: '점주 확인 필요', tone: 'orange' }
 }
 
+export function getPresetPeriod(days: number, now: Date): Period {
+  const end = kstDay(now)
+  return { start: shiftDay(end, 1 - days), end }
+}
+
+export function getPeriodError({ start, end }: Period, now: Date): string | null {
+  if (!start || !end) return '시작일과 종료일을 모두 선택하세요.'
+  if (start > end) return '시작일은 종료일보다 늦을 수 없습니다.'
+  if (end > kstDay(now)) return '오늘 이후 날짜는 선택할 수 없습니다.'
+  if (listDays({ start, end }).length > MAX_PERIOD_DAYS) return `기간은 최대 ${MAX_PERIOD_DAYS}일까지 선택할 수 있습니다.`
+  return null
+}
+
 export function getReportStats(alerts: AlertItem[], period: Period) {
   const events = alerts.filter((alert) => inPeriod(alert, period))
   const resolved = events.filter((alert) => alert.confirmed).length
@@ -111,16 +180,29 @@ export function getReportStats(alerts: AlertItem[], period: Period) {
 }
 
 export function getDailyTrend(alerts: AlertItem[], period: Period) {
-  const days = listDays(period)
-  const counts = days.map((day) => alerts.filter((alert) => kstDay(alert.occurredAt) === day).length)
-  const max = Math.max(0, ...counts)
-  return days.map((day, index) => ({
-    date: day,
-    label: `${Number(day.slice(8))}일`,
-    count: counts[index],
-    ratio: max === 0 ? 0 : counts[index] / max,
-    isPeak: max > 0 && counts[index] === max,
-  }))
+  return withScale(
+    listDays(period).map((day) => ({
+      date: day,
+      label: `${Number(day.slice(8))}일`,
+      count: alerts.filter((alert) => kstDay(alert.occurredAt) === day).length,
+    })),
+  )
+}
+
+export function getTimeTrend(alerts: AlertItem[], period: Period) {
+  const events = alerts.filter((alert) => inPeriod(alert, period))
+  const slots = Array.from({ length: 24 / SLOT_HOURS }, (_, index) => {
+    const startHour = index * SLOT_HOURS
+    const slotEvents = events.filter((alert) => Math.floor(kstHour(alert.occurredAt) / SLOT_HOURS) === index)
+    return {
+      label: `${startHour}~${startHour + SLOT_HOURS}시`,
+      count: slotEvents.length,
+      byKind: Object.fromEntries(
+        alertKinds.map((kind) => [kind, slotEvents.filter((alert) => alert.kind === kind).length]),
+      ) as Record<AlertKind, number>,
+    }
+  })
+  return withScale(slots)
 }
 
 export function getReportSummary(
@@ -128,7 +210,7 @@ export function getReportSummary(
   recommendation: string,
 ): string[] {
   return [
-    `이번 주 이상행동 감지 이벤트 ${stats.detected}건`,
+    `선택한 기간의 이상행동 감지 이벤트 ${stats.detected}건`,
     stats.unconfirmed > 0 ? `미확인 이벤트 ${stats.unconfirmed}건 확인 필요` : '미확인 이벤트 없음',
     recommendation,
   ]

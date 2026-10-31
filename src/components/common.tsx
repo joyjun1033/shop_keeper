@@ -19,9 +19,15 @@ export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`badge badge--${tone}`}>{children}</span>
 }
 
-export function LinkButton({ children, onClick }: { children: ReactNode; onClick?: () => void }) {
+type LinkButtonProps = {
+  children: ReactNode
+  expanded?: boolean
+  onClick?: () => void
+}
+
+export function LinkButton({ children, expanded, onClick }: LinkButtonProps) {
   return (
-    <button type="button" className="link-button" onClick={onClick}>
+    <button type="button" className="link-button" aria-expanded={expanded} onClick={onClick}>
       {children}
       <ArrowRight size={14} strokeWidth={2.2} aria-hidden />
     </button>
