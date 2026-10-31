@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
-import { alerts, clips, demoNow, inquiries } from '../data/mock'
+import { alerts, clips, demoNow, inquiries, store } from '../data/mock'
 import type { AlertItem, Inquiry } from '../domain/types'
 import AlertsPage from './AlertsPage'
 import HomePage from './HomePage'
@@ -20,7 +20,7 @@ function renderAlerts(items: AlertItem[] = alerts) {
 
 describe('홈', () => {
   test('예시 데이터로 계산한 숫자를 보여준다', () => {
-    render(<HomePage alerts={alerts} inquiries={inquiries} now={demoNow} />)
+    render(<HomePage store={store} alerts={alerts} inquiries={inquiries} now={demoNow} />)
 
     expect(statValue('오늘 감지')).toHaveTextContent('03건')
     expect(statValue('미확인 알림')).toHaveTextContent('01건')
@@ -29,7 +29,7 @@ describe('홈', () => {
   })
 
   test('최근 활동에 알림만 최신순으로 나온다', () => {
-    render(<HomePage alerts={alerts} inquiries={inquiries} now={demoNow} />)
+    render(<HomePage store={store} alerts={alerts} inquiries={inquiries} now={demoNow} />)
 
     const items = within(screen.getByRole('list')).getAllByRole('listitem')
 
@@ -41,10 +41,22 @@ describe('홈', () => {
   })
 
   test('이벤트와 문의가 하나도 없어도 화면이 유지된다', () => {
-    render(<HomePage alerts={[]} inquiries={[]} now={demoNow} />)
+    render(<HomePage store={store} alerts={[]} inquiries={[]} now={demoNow} />)
 
     expect(statValue('오늘 감지')).toHaveTextContent('00건')
     expect(screen.getByText('미확인 이벤트가 없습니다.')).toBeInTheDocument()
+  })
+
+  test('서버 연결이 없으면 로그아웃 버튼을 보여주지 않는다', () => {
+    render(<HomePage store={store} alerts={[]} inquiries={[]} now={demoNow} />)
+
+    expect(screen.queryByRole('button', { name: '로그아웃' })).not.toBeInTheDocument()
+  })
+
+  test('서버에서 받은 매장 이름을 보여준다', () => {
+    render(<HomePage store={{ name: '역삼 무인점', status: '운영 정상' }} alerts={[]} inquiries={[]} now={demoNow} />)
+
+    expect(screen.getByRole('heading', { name: '역삼 무인점' })).toBeInTheDocument()
   })
 })
 
@@ -170,12 +182,13 @@ describe('문의', () => {
 })
 
 describe('리포트', () => {
-  function renderReport(items: AlertItem[] = alerts) {
-    render(<ReportPage alerts={items} now={demoNow} />)
+  async function renderReport(items: AlertItem[] = alerts) {
+    render(<ReportPage loadAlerts={async () => items} revision={0} now={demoNow} />)
+    await screen.findByText('감지 이벤트')
   }
 
-  test('통계, 추이, 요약이 같은 숫자를 보여준다', () => {
-    renderReport()
+  test('통계, 추이, 요약이 같은 숫자를 보여준다', async () => {
+    await renderReport()
 
     expect(statValue('감지 이벤트')).toHaveTextContent('12건')
     expect(statValue('처리 완료')).toHaveTextContent('11건')
@@ -192,36 +205,86 @@ describe('리포트', () => {
   })
 
   test('월간을 누르면 기간과 통계가 바뀐다', async () => {
-    renderReport()
+    await renderReport()
 
     await userEvent.click(screen.getByRole('button', { name: '월간' }))
 
     expect(screen.getByText('2026. 09. 24 ~ 10. 23')).toBeInTheDocument()
-    expect(statValue('감지 이벤트')).toHaveTextContent('15건')
+    await waitFor(() => expect(statValue('감지 이벤트')).toHaveTextContent('15건'))
     expect(screen.getByRole('button', { name: '월간' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  test('날짜를 직접 고르면 그 기간으로 집계한다', () => {
-    renderReport()
+  test('날짜를 직접 고르면 그 기간으로 집계한다', async () => {
+    await renderReport()
 
     fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-10-20' } })
     fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-10-20' } })
 
     expect(screen.getByText('2026. 10. 20 ~ 10. 20')).toBeInTheDocument()
-    expect(statValue('감지 이벤트')).toHaveTextContent('04건')
+    await waitFor(() => expect(statValue('감지 이벤트')).toHaveTextContent('04건'))
   })
 
-  test('잘못된 기간은 안내하고 직전 기간의 결과를 유지한다', () => {
-    renderReport()
+  test('잘못된 기간은 서버에 요청하지 않고 직전 기간의 결과를 유지한다', async () => {
+    const loadAlerts = vi.fn(async () => alerts)
+    render(<ReportPage loadAlerts={loadAlerts} revision={0} now={demoNow} />)
+    await screen.findByText('감지 이벤트')
 
     fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-10-24' } })
 
     expect(screen.getByRole('alert')).toHaveTextContent('시작일은 종료일보다 늦을 수 없습니다.')
     expect(statValue('감지 이벤트')).toHaveTextContent('12건')
+    expect(loadAlerts).toHaveBeenCalledTimes(1)
+  })
+
+  test('선택한 기간으로 데이터를 요청한다', async () => {
+    const loadAlerts = vi.fn(async () => alerts)
+    render(<ReportPage loadAlerts={loadAlerts} revision={0} now={demoNow} />)
+    await screen.findByText('감지 이벤트')
+
+    await userEvent.click(screen.getByRole('button', { name: '월간' }))
+
+    expect(loadAlerts).toHaveBeenLastCalledWith({ start: '2026-09-24', end: '2026-10-23' })
+  })
+
+  test('데이터가 바뀌었다는 신호를 받으면 다시 요청한다', async () => {
+    const loadAlerts = vi.fn(async () => alerts)
+    const { rerender } = render(<ReportPage loadAlerts={loadAlerts} revision={0} now={demoNow} />)
+    await screen.findByText('감지 이벤트')
+
+    rerender(<ReportPage loadAlerts={loadAlerts} revision={1} now={demoNow} />)
+
+    await waitFor(() => expect(loadAlerts).toHaveBeenCalledTimes(2))
+  })
+
+  test('불러오기에 실패하면 안내하고 다시 시도할 수 있다', async () => {
+    const loadAlerts = vi.fn<() => Promise<AlertItem[]>>().mockRejectedValueOnce(new Error('down'))
+    loadAlerts.mockResolvedValue(alerts)
+    render(<ReportPage loadAlerts={loadAlerts} revision={0} now={demoNow} />)
+
+    expect(await screen.findByText('리포트를 불러오지 못했습니다.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '다시 시도' }))
+
+    expect(await screen.findByText('감지 이벤트')).toBeInTheDocument()
+    expect(screen.queryByText('리포트를 불러오지 못했습니다.')).not.toBeInTheDocument()
+  })
+
+  test('늦게 도착한 이전 기간의 응답은 무시한다', async () => {
+    let finishWeekly: (items: AlertItem[]) => void = () => {}
+    const loadAlerts = vi.fn(({ start }: { start: string }) =>
+      start === '2026-10-17' ? new Promise<AlertItem[]>((resolve) => (finishWeekly = resolve)) : Promise.resolve(alerts),
+    )
+    render(<ReportPage loadAlerts={loadAlerts} revision={0} now={demoNow} />)
+
+    await userEvent.click(screen.getByRole('button', { name: '월간' }))
+    await waitFor(() => expect(statValue('감지 이벤트')).toHaveTextContent('15건'))
+    await act(async () => finishWeekly([]))
+
+    expect(statValue('감지 이벤트')).toHaveTextContent('15건')
   })
 
   test('시간대별을 누르면 가장 잦은 시간대와 범례를 보여준다', async () => {
-    renderReport()
+    await renderReport()
 
     await userEvent.click(screen.getByRole('button', { name: '시간대별' }))
 
@@ -230,7 +293,7 @@ describe('리포트', () => {
   })
 
   test('막대를 누르면 해당 구간의 유형별 건수를 보여준다', async () => {
-    renderReport()
+    await renderReport()
 
     await userEvent.click(screen.getByRole('button', { name: '시간대별' }))
     await userEvent.click(screen.getByRole('button', { name: /^20~24시/ }))
@@ -239,7 +302,7 @@ describe('리포트', () => {
   })
 
   test('표로 보기에도 같은 숫자가 있다', async () => {
-    renderReport()
+    await renderReport()
 
     await userEvent.click(screen.getByRole('button', { name: '시간대별' }))
     const row = screen.getByRole('rowheader', { name: '12~16시' }).closest('tr')!
@@ -247,8 +310,8 @@ describe('리포트', () => {
     expect(within(row).getAllByRole('cell').map((cell) => cell.textContent)).toEqual(['2', '2', '0', '4'])
   })
 
-  test('이벤트가 없는 기간은 그래프 대신 안내를 보여준다', () => {
-    renderReport([])
+  test('이벤트가 없는 기간은 그래프 대신 안내를 보여준다', async () => {
+    await renderReport([])
 
     expect(screen.getByText('선택한 기간에 발생한 이벤트가 없습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: '일별 이벤트 수' })).not.toBeInTheDocument()

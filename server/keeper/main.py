@@ -1,0 +1,132 @@
+import os
+import sqlite3
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import AwareDatetime
+
+from . import repository
+from .db import connect, init_db
+from .schemas import IngestEvent, LoginRequest
+
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "keeper.db"
+SESSION_TTL = timedelta(days=30)
+MAX_PERIOD_DAYS = 31
+
+bearer = HTTPBearer(auto_error=False)
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def create_app(db_path: str | Path | None = None, clock: Callable[[], datetime] = utc_now) -> FastAPI:
+    path = db_path or os.environ.get("KEEPER_DB_PATH", DEFAULT_DB_PATH)
+    init_db(path)
+    app = FastAPI(title="Keeper API")
+
+    def get_conn():
+        conn = connect(path)
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    def owner_store(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> str:
+        store_id = credentials and repository.store_for_token(conn, credentials.credentials, clock())
+        if not store_id:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인이 필요합니다.")
+        return store_id
+
+    def device_store(
+        x_device_key: str | None = Header(default=None),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> str:
+        store_id = x_device_key and repository.store_for_device(conn, x_device_key)
+        if not store_id:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "등록되지 않은 기기입니다.")
+        return store_id
+
+    @app.get("/health")
+    def health():
+        return {"status": "ok"}
+
+    @app.post("/api/auth/login")
+    def login(body: LoginRequest, conn: sqlite3.Connection = Depends(get_conn)):
+        token = repository.login(conn, body.email, body.password, clock(), SESSION_TTL)
+        if not token:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.")
+        return {"token": token}
+
+    @app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+    def logout(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        if credentials:
+            repository.logout(conn, credentials.credentials)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get("/api/dashboard")
+    def dashboard(
+        since: AwareDatetime = Query(),
+        store_id: str = Depends(owner_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        return repository.get_dashboard(conn, store_id, since)
+
+    @app.get("/api/alerts")
+    def alerts_in_period(
+        start: date = Query(),
+        end: date = Query(),
+        store_id: str = Depends(owner_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        if start > end:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "시작일은 종료일보다 늦을 수 없습니다.")
+        if (end - start).days + 1 > MAX_PERIOD_DAYS:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"기간은 최대 {MAX_PERIOD_DAYS}일까지 선택할 수 있습니다.",
+            )
+        return repository.get_alerts_in_period(conn, store_id, start, end)
+
+    # 다른 매장의 항목은 존재 여부도 알 수 없도록 없는 항목과 똑같이 404로 답한다
+    @app.post("/api/alerts/{alert_id}/confirm", status_code=status.HTTP_204_NO_CONTENT)
+    def confirm_alert(
+        alert_id: str,
+        store_id: str = Depends(owner_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        if not repository.confirm_alert(conn, store_id, alert_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "알림을 찾을 수 없습니다.")
+
+    @app.post("/api/inquiries/{inquiry_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+    def read_inquiry(
+        inquiry_id: str,
+        store_id: str = Depends(owner_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        if not repository.mark_inquiry_read(conn, store_id, inquiry_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "문의를 찾을 수 없습니다.")
+
+    @app.post("/ingest/events", status_code=status.HTTP_202_ACCEPTED)
+    def ingest(
+        event: IngestEvent,
+        store_id: str = Depends(device_store),
+        conn: sqlite3.Connection = Depends(get_conn),
+    ):
+        try:
+            accepted = repository.ingest_event(conn, store_id, event)
+        except repository.UnknownAlert:
+            # 순서가 뒤바뀐 경우 처리 기록이 남지 않으므로 관리용 앱이 다시 보낼 수 있다
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "연결할 알림을 찾을 수 없습니다.") from None
+        return {"status": "accepted" if accepted else "duplicate"}
+
+    return app

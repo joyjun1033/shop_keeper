@@ -1,5 +1,10 @@
 export type Tone = 'red' | 'orange' | 'green' | 'blue'
 
+export type Store = {
+  name: string
+  status: string
+}
+
 export type AlertItem = {
   id: string
   label: string

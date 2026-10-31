@@ -5,6 +5,7 @@ import {
   formatKstTime,
   formatPeriod,
   kstDay,
+  kstDayStart,
   kstHour,
   listDays,
   shiftDay,
@@ -20,6 +21,10 @@ describe('한국 시간 변환', () => {
 
   test('자정은 24시가 아니라 00시로 표시한다', () => {
     expect(formatKstTime('2026-10-22T15:05:00Z')).toBe('00:05')
+  })
+
+  test('오늘의 시작은 한국 시간 자정이다', () => {
+    expect(kstDayStart('2026-10-22T15:00:00Z')).toBe('2026-10-23T00:00:00+09:00')
   })
 
   test('시는 한국 시간 기준 숫자로 돌려준다', () => {

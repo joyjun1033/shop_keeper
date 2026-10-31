@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader, StatRow } from '../components/common'
 import { DailyChart, DailyTable, TimeChart, TimeTable } from '../components/ReportCharts'
 import { reportRecommendation } from '../data/mock'
@@ -23,21 +23,98 @@ const chartViews = [
   { id: 'time', label: '시간대별' },
 ] as const
 
-type Props = {
-  alerts: AlertItem[]
-  now: Date
-}
-
-export default function ReportPage({ alerts, now }: Props) {
-  const [period, setPeriod] = useState<Period>(() => getPresetPeriod(7, now))
-  const [draft, setDraft] = useState(period)
+function ReportResult({ alerts, period }: { alerts: AlertItem[]; period: Period }) {
   const [view, setView] = useState<'daily' | 'time'>('daily')
-
-  const error = getPeriodError(draft, now)
   const stats = getReportStats(alerts, period)
   const dailyTrend = getDailyTrend(alerts, period)
   const timeTrend = getTimeTrend(alerts, period)
   const summary = getReportSummary(stats, reportRecommendation)
+
+  return (
+    <>
+      <StatRow
+        items={[
+          { label: '감지 이벤트', value: stats.detected, tone: 'blue' },
+          { label: '처리 완료', value: stats.resolved, tone: 'blue' },
+          { label: '미확인', value: stats.unconfirmed, tone: 'red' },
+        ]}
+      />
+
+      <section className="card">
+        <div className="card__head">
+          <h2>알림 이벤트 발생 추이</h2>
+          <div className="pill-group">
+            {chartViews.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                className="pill-button"
+                aria-pressed={view === item.id}
+                onClick={() => setView(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {stats.detected === 0 ? (
+          <p className="empty-note">선택한 기간에 발생한 이벤트가 없습니다.</p>
+        ) : view === 'daily' ? (
+          <>
+            <DailyChart points={dailyTrend} />
+            <DailyTable points={dailyTrend} />
+          </>
+        ) : (
+          <>
+            <TimeChart points={timeTrend} />
+            <TimeTable points={timeTrend} />
+          </>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>AI 점검 요약</h2>
+        <ul className="summary-list">
+          {summary.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </section>
+    </>
+  )
+}
+
+type Props = {
+  loadAlerts: (period: Period) => Promise<AlertItem[]>
+  revision: number
+  now: Date
+}
+
+export default function ReportPage({ loadAlerts, revision, now }: Props) {
+  const [period, setPeriod] = useState<Period>(() => getPresetPeriod(7, now))
+  const [draft, setDraft] = useState(period)
+  const [result, setResult] = useState<{ alerts: AlertItem[]; period: Period } | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+
+  useEffect(() => {
+    let stale = false
+    loadAlerts(period).then(
+      (alerts) => {
+        if (stale) return
+        setResult({ alerts, period })
+        setLoadFailed(false)
+      },
+      () => {
+        if (!stale) setLoadFailed(true)
+      },
+    )
+    return () => {
+      stale = true
+    }
+  }, [loadAlerts, period, revision, retryCount])
+
+  const error = getPeriodError(draft, now)
 
   const changePeriod = (next: Period) => {
     setDraft(next)
@@ -99,54 +176,16 @@ export default function ReportPage({ alerts, now }: Props) {
           )}
         </section>
 
-        <StatRow
-          items={[
-            { label: '감지 이벤트', value: stats.detected, tone: 'blue' },
-            { label: '처리 완료', value: stats.resolved, tone: 'blue' },
-            { label: '미확인', value: stats.unconfirmed, tone: 'red' },
-          ]}
-        />
-
-        <section className="card">
-          <div className="card__head">
-            <h2>알림 이벤트 발생 추이</h2>
-            <div className="pill-group">
-              {chartViews.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className="pill-button"
-                  aria-pressed={view === item.id}
-                  onClick={() => setView(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {stats.detected === 0 ? (
-            <p className="empty-note">선택한 기간에 발생한 이벤트가 없습니다.</p>
-          ) : view === 'daily' ? (
-            <>
-              <DailyChart points={dailyTrend} />
-              <DailyTable points={dailyTrend} />
-            </>
-          ) : (
-            <>
-              <TimeChart points={timeTrend} />
-              <TimeTable points={timeTrend} />
-            </>
-          )}
-        </section>
-
-        <section className="card">
-          <h2>AI 점검 요약</h2>
-          <ul className="summary-list">
-            {summary.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </section>
+        {loadFailed && (
+          <section className="card split-card">
+            <p className="field-error">리포트를 불러오지 못했습니다.</p>
+            <button type="button" className="pill-button" onClick={() => setRetryCount((count) => count + 1)}>
+              다시 시도
+            </button>
+          </section>
+        )}
+        {!result && !loadFailed && <p className="card empty-note">불러오는 중입니다.</p>}
+        {result && <ReportResult alerts={result.alerts} period={result.period} />}
       </div>
     </>
   )

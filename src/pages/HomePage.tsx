@@ -1,16 +1,17 @@
 import { Badge, PageHeader, StatRow } from '../components/common'
-import { store } from '../data/mock'
 import { getHomeStats, getRecentActivities, getTodaySummary } from '../domain/rules'
 import { formatKstDate } from '../domain/time'
-import type { AlertItem, Inquiry } from '../domain/types'
+import type { AlertItem, Inquiry, Store } from '../domain/types'
 
 type Props = {
+  store: Store
   alerts: AlertItem[]
   inquiries: Inquiry[]
   now: Date
+  onLogout?: () => void
 }
 
-export default function HomePage({ alerts, inquiries, now }: Props) {
+export default function HomePage({ store, alerts, inquiries, now, onLogout }: Props) {
   const stats = getHomeStats(alerts, inquiries, now)
   const activities = getRecentActivities(alerts, now)
   const summary = getTodaySummary(stats.unconfirmedAlerts)
@@ -59,6 +60,12 @@ export default function HomePage({ alerts, inquiries, now }: Props) {
             <span>{summary.detail}</span>
           </div>
         </section>
+
+        {onLogout && (
+          <button type="button" className="logout-button" onClick={onLogout}>
+            로그아웃
+          </button>
+        )}
       </div>
     </>
   )

@@ -24,6 +24,10 @@ export function formatKstTime(value: Date | string): string {
   return timeFormat.format(new Date(value))
 }
 
+export function kstDayStart(value: Date | string): string {
+  return `${kstDay(value)}T00:00:00+09:00`
+}
+
 export function kstHour(value: Date | string): number {
   return Number(formatKstTime(value).slice(0, 2))
 }

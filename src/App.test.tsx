@@ -11,7 +11,7 @@ vi.mock('./data/mock', async (importOriginal) => ({
 test('카메라가 한 대도 없어도 앱이 열리고 CCTV 탭에서 안내가 보인다', async () => {
   render(<App />)
 
-  await userEvent.click(screen.getByRole('button', { name: 'CCTV' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'CCTV' }))
 
   expect(screen.getByText('등록된 카메라가 없습니다')).toBeInTheDocument()
 })

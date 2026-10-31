@@ -1,11 +1,11 @@
-// 시안의 예시 데이터. 백엔드를 붙일 때는 이 파일의 값을 API 응답으로 교체한다.
+// 서버 없이 화면을 볼 때 쓰는 예시 데이터. 서버와 연결하면 쓰이지 않는다.
 // 화면의 숫자는 여기에 적지 않고 domain/rules.ts에서 계산한다.
-import type { AlertItem, AlertKind, Camera, Clip, Inquiry } from '../domain/types'
+import type { AlertItem, AlertKind, Camera, Clip, Inquiry, Store } from '../domain/types'
 
 // 예시 데이터가 기준으로 삼는 현재 시각
 export const demoNow = new Date('2026-10-23T15:00:00+09:00')
 
-export const store = {
+export const store: Store = {
   name: '우리동네 아이스크림점',
   status: '운영 정상',
 }
