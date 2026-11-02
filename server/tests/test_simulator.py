@@ -3,9 +3,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from clear_dev_data import clear
+from issue_device_key import save_key
+from keeper import repository
 from keeper.db import connect
-from simulator import Device, DeviceError, build_steps, run_scenario
+from simulator import Device, DeviceError, build_steps, load_device_key, run_scenario
 
+from .conftest import movement
 from .test_contract import validator_for
 
 NOW = datetime(2026, 10, 23, 6, 0, tzinfo=UTC)
@@ -139,6 +142,61 @@ def test_events_can_be_replayed_after_clearing(store, db_path):
     run(store)
 
     assert len(store.dashboard(store.login())["alerts"]) == 3
+
+
+def issue_key(db_path, email):
+    conn = connect(db_path)
+    try:
+        return repository.add_device(conn, email)
+    finally:
+        conn.close()
+
+
+def test_extra_key_sends_events_to_that_owners_store_only(make_store, db_path):
+    target, other = make_store("target"), make_store("other")
+
+    key = issue_key(db_path, target.email.upper())
+    response = target.client.post("/ingest/events", json=movement(), headers={"X-Device-Key": key})
+
+    assert response.status_code == 202
+    assert len(target.dashboard(target.login())["alerts"]) == 1
+    assert other.dashboard(other.login())["alerts"] == []
+
+
+def test_extra_key_keeps_the_original_key_working(store, db_path):
+    issue_key(db_path, store.email)
+
+    store.send_ok(movement())
+
+
+def test_no_key_is_issued_for_an_unknown_account(client, db_path):
+    assert issue_key(db_path, "nobody@keeper.test") is None
+
+
+def test_simulator_uses_the_dev_store_by_default(tmp_path):
+    credentials = tmp_path / "credentials.json"
+    credentials.write_text('{"deviceKey": "dev-key"}', encoding="utf-8")
+
+    assert load_device_key(None, credentials) == "dev-key"
+
+
+def test_simulator_explains_a_missing_seed(tmp_path):
+    with pytest.raises(DeviceError, match="seed.py"):
+        load_device_key(None, tmp_path / "missing.json")
+
+
+def test_simulator_finds_a_saved_key_by_email(tmp_path):
+    keys = tmp_path / "keys.json"
+    save_key(keys, "Owner@Keeper.Test", "first-key")
+    save_key(keys, "other@keeper.test", "other-key")
+
+    assert load_device_key(" owner@keeper.test ", keys_path=keys) == "first-key"
+    assert load_device_key("other@keeper.test", keys_path=keys) == "other-key"
+
+
+def test_simulator_explains_how_to_get_a_missing_key(tmp_path):
+    with pytest.raises(DeviceError, match="issue_device_key.py"):
+        load_device_key("owner@keeper.test", keys_path=tmp_path / "missing.json")
 
 
 def test_scenario_total_length_is_about_a_minute():

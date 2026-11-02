@@ -5,6 +5,7 @@
     python simulator.py              시나리오를 한 번 실행한다
     python simulator.py --speed 5    5배 빠르게 실행한다
     python simulator.py --stay       끝난 뒤에도 Ctrl+C를 누를 때까지 연결을 유지한다
+    python simulator.py --email 주소  회원가입한 매장으로 보낸다 (issue_device_key.py를 먼저 실행)
 """
 
 import argparse
@@ -21,6 +22,7 @@ from pathlib import Path
 from uuid import uuid4
 
 CREDENTIALS_PATH = Path(__file__).resolve().parent / "dev-credentials.local.json"
+DEVICE_KEYS_PATH = Path(__file__).resolve().parent / "dev-device-keys.local.json"
 SERVER_URL = "http://127.0.0.1:8000"
 KST = timezone(timedelta(hours=9))
 HEARTBEAT_SECONDS = 60
@@ -246,19 +248,38 @@ def keep_alive(device: Device, stop: threading.Event, interval: float) -> None:
             continue
 
 
+def load_device_key(
+    email: str | None,
+    credentials_path: Path = CREDENTIALS_PATH,
+    keys_path: Path = DEVICE_KEYS_PATH,
+) -> str:
+    if email is None:
+        if not credentials_path.exists():
+            raise DeviceError(f"{credentials_path.name} 파일이 없습니다. seed.py를 먼저 실행하세요.")
+        return json.loads(credentials_path.read_text(encoding="utf-8"))["deviceKey"]
+
+    keys = json.loads(keys_path.read_text(encoding="utf-8")) if keys_path.exists() else {}
+    device_key = keys.get(email.strip().lower())
+    if device_key is None:
+        raise DeviceError(f"{email}의 키가 없습니다. issue_device_key.py {email} 를 먼저 실행하세요.")
+    return device_key
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="#Keeper 관리용 앱 시뮬레이터")
     parser.add_argument("--speed", type=float, default=1, help="시나리오 재생 속도")
     parser.add_argument("--stay", action="store_true", help="끝난 뒤에도 연결 유지")
     parser.add_argument("--url", default=SERVER_URL, help="서버 주소")
+    parser.add_argument("--email", help="회원가입한 점주의 매장으로 보낸다")
     args = parser.parse_args()
 
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
-    if not CREDENTIALS_PATH.exists():
-        print(f"{CREDENTIALS_PATH.name} 파일이 없습니다. seed.py를 먼저 실행하세요.")
+    try:
+        device_key = load_device_key(args.email)
+    except DeviceError as error:
+        print(error)
         return 1
 
-    device_key = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))["deviceKey"]
     device = Device(http_transport(args.url, device_key))
     stop = threading.Event()
     heartbeat = threading.Thread(target=keep_alive, args=(device, stop, HEARTBEAT_SECONDS), daemon=True)

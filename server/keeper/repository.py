@@ -31,25 +31,56 @@ class UnknownAlert(Exception):
     pass
 
 
+class EmailTaken(Exception):
+    pass
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 def create_store(conn: sqlite3.Connection, name: str, email: str, password: str) -> tuple[str, str]:
     """매장, 점주 계정, 관리용 앱 키를 만들고 (store_id, device_key)를 돌려준다."""
     store_id = uuid4().hex
     device_key = security.new_secret()
-    with transaction(conn):
-        conn.execute("INSERT INTO stores (id, name) VALUES (?, ?)", (store_id, name))
-        conn.execute(
-            "INSERT INTO owners (store_id, email, password_hash) VALUES (?, ?, ?)",
-            (store_id, email, security.hash_password(password)),
-        )
-        conn.execute(
-            "INSERT INTO devices (key_hash, store_id) VALUES (?, ?)",
-            (security.hash_secret(device_key), store_id),
-        )
+    password_hash = security.hash_password(password)
+    try:
+        with transaction(conn):
+            conn.execute("INSERT INTO stores (id, name) VALUES (?, ?)", (store_id, name))
+            conn.execute(
+                "INSERT INTO owners (store_id, email, password_hash) VALUES (?, ?, ?)",
+                (store_id, _normalize_email(email), password_hash),
+            )
+            conn.execute(
+                "INSERT INTO devices (key_hash, store_id) VALUES (?, ?)",
+                (security.hash_secret(device_key), store_id),
+            )
+    except sqlite3.IntegrityError:
+        raise EmailTaken(email) from None
     return store_id, device_key
 
 
+def add_device(conn: sqlite3.Connection, email: str) -> str | None:
+    """점주의 매장에 관리용 앱 키를 하나 더 만든다. 없는 계정이면 None을 돌려준다."""
+    owner = conn.execute(
+        "SELECT store_id FROM owners WHERE email = ?",
+        (_normalize_email(email),),
+    ).fetchone()
+    if owner is None:
+        return None
+    device_key = security.new_secret()
+    conn.execute(
+        "INSERT INTO devices (key_hash, store_id) VALUES (?, ?)",
+        (security.hash_secret(device_key), owner["store_id"]),
+    )
+    return device_key
+
+
 def login(conn: sqlite3.Connection, email: str, password: str, now: datetime, ttl: timedelta) -> str | None:
-    owner = conn.execute("SELECT id, password_hash FROM owners WHERE email = ?", (email,)).fetchone()
+    owner = conn.execute(
+        "SELECT id, password_hash FROM owners WHERE email = ?",
+        (_normalize_email(email),),
+    ).fetchone()
     stored = owner["password_hash"] if owner else security.DUMMY_PASSWORD_HASH
     if not security.verify_password(password, stored) or owner is None:
         return None

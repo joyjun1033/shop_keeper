@@ -81,3 +81,14 @@ IngestEvent = Annotated[
 class LoginRequest(BaseModel):
     email: Annotated[str, StringConstraints(max_length=200)]
     password: Annotated[str, StringConstraints(max_length=200)]
+
+
+class SignupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=200, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
+    ]
+    password: Annotated[str, StringConstraints(min_length=8, max_length=200)]
+    storeName: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]

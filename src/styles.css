@@ -157,6 +157,29 @@ button:focus-visible {
   cursor: default;
 }
 
+.login__switch {
+  align-self: center;
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login__copy {
+  align-self: flex-start;
+}
+
+.device-key {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 .connection-banner {
   padding: 6px 16px;
   background: var(--orange-soft);

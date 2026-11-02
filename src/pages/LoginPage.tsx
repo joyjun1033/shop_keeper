@@ -4,9 +4,10 @@ import { ApiError, login } from '../api/httpApi'
 type Props = {
   baseUrl: string
   onLogin: (token: string) => void
+  onSignup: () => void
 }
 
-export default function LoginPage({ baseUrl, onLogin }: Props) {
+export default function LoginPage({ baseUrl, onLogin, onSignup }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +61,9 @@ export default function LoginPage({ baseUrl, onLogin }: Props) {
           )}
           <button type="submit" className="confirm-button login__submit" disabled={submitting}>
             로그인
+          </button>
+          <button type="button" className="login__switch" onClick={onSignup}>
+            회원가입
           </button>
         </form>
       </main>

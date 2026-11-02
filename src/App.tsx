@@ -4,6 +4,7 @@ import { createPreviewApi } from './api/previewApi'
 import { clearToken, readToken, saveToken } from './api/session'
 import OwnerApp from './OwnerApp'
 import LoginPage from './pages/LoginPage'
+import SignupPage from './pages/SignupPage'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? ''
 const POLL_MS = 10_000
@@ -16,6 +17,7 @@ function PreviewApp() {
 
 function ServerApp() {
   const [token, setToken] = useState(readToken)
+  const [signingUp, setSigningUp] = useState(false)
   const [startAt] = useState(() => new Date())
   const api = useMemo(() => (token ? createHttpApi(API_BASE_URL, token) : null), [token])
 
@@ -24,15 +26,17 @@ function ServerApp() {
     setToken(null)
   }, [])
 
+  const signIn = (next: string) => {
+    saveToken(next)
+    setSigningUp(false)
+    setToken(next)
+  }
+
   if (!api) {
-    return (
-      <LoginPage
-        baseUrl={API_BASE_URL}
-        onLogin={(next) => {
-          saveToken(next)
-          setToken(next)
-        }}
-      />
+    return signingUp ? (
+      <SignupPage baseUrl={API_BASE_URL} onDone={signIn} onBack={() => setSigningUp(false)} />
+    ) : (
+      <LoginPage baseUrl={API_BASE_URL} onLogin={signIn} onSignup={() => setSigningUp(true)} />
     )
   }
 

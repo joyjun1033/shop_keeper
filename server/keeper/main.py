@@ -10,7 +10,7 @@ from pydantic import AwareDatetime
 
 from . import repository
 from .db import connect, init_db
-from .schemas import IngestEvent, LoginRequest
+from .schemas import IngestEvent, LoginRequest, SignupRequest
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "keeper.db"
 SESSION_TTL = timedelta(days=30)
@@ -56,6 +56,15 @@ def create_app(db_path: str | Path | None = None, clock: Callable[[], datetime] 
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.post("/api/auth/signup", status_code=status.HTTP_201_CREATED)
+    def signup(body: SignupRequest, conn: sqlite3.Connection = Depends(get_conn)):
+        try:
+            _, device_key = repository.create_store(conn, body.storeName, body.email, body.password)
+        except repository.EmailTaken:
+            raise HTTPException(status.HTTP_409_CONFLICT, "이미 가입된 이메일입니다.") from None
+        token = repository.login(conn, body.email, body.password, clock(), SESSION_TTL)
+        return {"token": token, "deviceKey": device_key}
 
     @app.post("/api/auth/login")
     def login(body: LoginRequest, conn: sqlite3.Connection = Depends(get_conn)):

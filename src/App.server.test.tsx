@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import App from './App'
@@ -7,6 +7,7 @@ import { alerts, cameras, clips, demoNow, inquiries, onlineIntegration, store } 
 
 const TOKEN = 'test-token'
 const TOKEN_KEY = 'keeper.token'
+const DEVICE_KEY = 'test-device-key'
 
 type Call = { method: string; url: string }
 
@@ -17,6 +18,8 @@ function createFakeServer() {
     inquiries,
     integration: onlineIntegration,
     status: 200,
+    signupStatus: 201,
+    signupBody: null as unknown,
     offline: false,
     calls: [] as Call[],
   }
@@ -32,6 +35,12 @@ function createFakeServer() {
     if (input === '/api/auth/login') {
       const { password } = JSON.parse(init.body as string)
       return password === 'right' ? respond({ token: TOKEN }) : respond({}, 401)
+    }
+    if (input === '/api/auth/signup') {
+      state.signupBody = JSON.parse(init.body as string)
+      return state.signupStatus === 201
+        ? respond({ token: TOKEN, deviceKey: DEVICE_KEY }, 201)
+        : respond({}, state.signupStatus)
     }
     if ((init.headers as Record<string, string>)?.Authorization !== `Bearer ${TOKEN}`) return respond({}, 401)
     if (state.status !== 200) return respond({}, state.status)
@@ -153,6 +162,127 @@ describe('로그인', () => {
     expect(screen.getByRole('heading', { name: '점주 로그인' })).toBeInTheDocument()
     expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull()
     expect(server.calls).toContainEqual({ method: 'POST', url: '/api/auth/logout' })
+  })
+})
+
+describe('회원가입', () => {
+  async function openSignup() {
+    render(<App dataSource="api" />)
+    await userEvent.click(screen.getByRole('button', { name: '회원가입' }))
+  }
+
+  async function fillForm(overrides: { password?: string; passwordConfirm?: string; email?: string } = {}) {
+    const { password = 'test-password', passwordConfirm = password, email = 'new@keeper.test' } = overrides
+    await userEvent.type(screen.getByLabelText('매장 이름'), '역삼 무인점')
+    await userEvent.type(screen.getByLabelText('이메일'), email)
+    await userEvent.type(screen.getByLabelText('비밀번호 (8자 이상)'), password)
+    await userEvent.type(screen.getByLabelText('비밀번호 확인'), passwordConfirm)
+  }
+
+  async function submit() {
+    await userEvent.click(screen.getByRole('button', { name: '가입하기' }))
+  }
+
+  test('로그인 화면의 회원가입 버튼으로 가입 화면이 열린다', async () => {
+    createFakeServer()
+
+    await openSignup()
+
+    expect(screen.getByRole('heading', { name: '점주 회원가입' })).toBeInTheDocument()
+  })
+
+  test('이미 계정이 있으면 로그인 화면으로 돌아갈 수 있다', async () => {
+    createFakeServer()
+    await openSignup()
+
+    await userEvent.click(screen.getByRole('button', { name: '이미 계정이 있어요' }))
+
+    expect(screen.getByRole('heading', { name: '점주 로그인' })).toBeInTheDocument()
+  })
+
+  test('가입하면 기기 키를 보여주고 시작하기를 눌러야 앱으로 들어간다', async () => {
+    const server = createFakeServer()
+    await openSignup()
+    await fillForm()
+
+    await submit()
+
+    expect(await screen.findByText(DEVICE_KEY)).toBeInTheDocument()
+    expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull()
+    expect(server.signupBody).toEqual({
+      storeName: '역삼 무인점',
+      email: 'new@keeper.test',
+      password: 'test-password',
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: '시작하기' }))
+
+    expect(await screen.findByText('매장 대시보드')).toBeInTheDocument()
+    expect(window.localStorage.getItem(TOKEN_KEY)).toBe(TOKEN)
+    expect(screen.queryByText(DEVICE_KEY)).not.toBeInTheDocument()
+  })
+
+  test('기기 키를 복사할 수 있다', async () => {
+    createFakeServer()
+    const writeText = vi.fn(async () => {})
+    await openSignup()
+    await fillForm()
+    await submit()
+    await screen.findByText(DEVICE_KEY)
+    vi.stubGlobal('navigator', { ...window.navigator, clipboard: { writeText } })
+
+    fireEvent.click(screen.getByRole('button', { name: '기기 키 복사' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('복사했습니다.')
+    expect(writeText).toHaveBeenCalledWith(DEVICE_KEY)
+  })
+
+  test('복사가 막힌 환경에서는 직접 복사하라고 안내한다', async () => {
+    createFakeServer()
+    await openSignup()
+    await fillForm()
+    await submit()
+    await screen.findByText(DEVICE_KEY)
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      clipboard: { writeText: () => Promise.reject(new Error('blocked')) },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '기기 키 복사' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('직접 선택해 복사')
+  })
+
+  test.each([
+    ['짧은 비밀번호', { password: 'short' }, '8자 이상'],
+    ['다른 비밀번호 확인', { passwordConfirm: 'different-password' }, '서로 다릅니다'],
+    ['잘못된 이메일', { email: 'not-an-email' }, '이메일 형식'],
+  ])('%s은 서버에 보내지 않고 안내한다', async (_name, overrides, message) => {
+    const server = createFakeServer()
+    await openSignup()
+    await fillForm(overrides)
+
+    await submit()
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+    expect(server.calls).toEqual([])
+  })
+
+  test.each([
+    [409, '이미 가입된 이메일입니다.'],
+    [422, '입력한 내용을 확인해 주세요.'],
+    [500, '서버에 연결할 수 없습니다.'],
+  ])('서버가 %i로 거부하면 안내하고 다시 시도할 수 있다', async (status, message) => {
+    const server = createFakeServer()
+    server.signupStatus = status
+    await openSignup()
+    await fillForm()
+
+    await submit()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('button', { name: '가입하기' })).toBeEnabled()
+    expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull()
   })
 })
 

@@ -33,6 +33,18 @@ export async function login(baseUrl: string, email: string, password: string): P
   return body.token
 }
 
+export async function signup(
+  baseUrl: string,
+  account: { email: string; password: string; storeName: string },
+): Promise<{ token: string; deviceKey: string }> {
+  const response = await request(baseUrl, '/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(account),
+  })
+  return (await response.json()) as { token: string; deviceKey: string }
+}
+
 export function createHttpApi(baseUrl: string, token: string): KeeperApi & { logout(): Promise<void> } {
   const authorized = (path: string, method = 'GET') =>
     request(baseUrl, path, { method, headers: { Authorization: `Bearer ${token}` } })

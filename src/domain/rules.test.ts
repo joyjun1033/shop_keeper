@@ -17,6 +17,7 @@ import {
   getRecentActivities,
   getReportStats,
   getReportSummary,
+  getSignupError,
   getTimeTrend,
   getTodayClips,
   getTodaySummary,
@@ -72,6 +73,40 @@ function makeInquiry(id: string, overrides: Partial<Inquiry> = {}): Inquiry {
     ...overrides,
   }
 }
+
+describe('회원가입 입력 검사', () => {
+  const valid = {
+    storeName: '역삼 무인점',
+    email: 'owner@keeper.test',
+    password: 'test-password',
+    passwordConfirm: 'test-password',
+  }
+
+  test('올바른 입력은 오류가 없다', () => {
+    expect(getSignupError(valid)).toBeNull()
+  })
+
+  test('매장 이름이 비어 있으면 오류다', () => {
+    expect(getSignupError({ ...valid, storeName: '   ' })).toContain('매장 이름')
+  })
+
+  test.each(['', 'not-an-email', 'a@b', 'a b@keeper.test'])('이메일 "%s"은 오류다', (email) => {
+    expect(getSignupError({ ...valid, email })).toContain('이메일')
+  })
+
+  test('앞뒤 공백이 있는 이메일은 허용한다', () => {
+    expect(getSignupError({ ...valid, email: ' owner@keeper.test ' })).toBeNull()
+  })
+
+  test('비밀번호는 8자부터 허용한다', () => {
+    expect(getSignupError({ ...valid, password: '1234567', passwordConfirm: '1234567' })).toContain('8자')
+    expect(getSignupError({ ...valid, password: '12345678', passwordConfirm: '12345678' })).toBeNull()
+  })
+
+  test('비밀번호 확인이 다르면 오류다', () => {
+    expect(getSignupError({ ...valid, passwordConfirm: 'different-password' })).toContain('서로 다릅니다')
+  })
+})
 
 describe('홈 집계', () => {
   test('오늘 감지는 오늘 생긴 알림 수이고 미확인은 확인하지 않은 알림 수다', () => {

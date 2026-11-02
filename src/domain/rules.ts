@@ -3,6 +3,7 @@ import type { AlertItem, AlertKind, Camera, Clip, ClipView, Inquiry, Integration
 
 const MAX_PERIOD_DAYS = 31
 const SLOT_HOURS = 4
+const MIN_PASSWORD_LENGTH = 8
 
 export const alertKinds: AlertKind[] = ['movement', 'duration', 'product']
 
@@ -47,6 +48,19 @@ function toClipView(clip: Clip, alert: AlertItem, now: Date): ClipView {
     cameraId: alert.cameraId,
     duration: clip.duration,
   }
+}
+
+export function getSignupError(form: {
+  storeName: string
+  email: string
+  password: string
+  passwordConfirm: string
+}): string | null {
+  if (!form.storeName.trim()) return '매장 이름을 입력하세요.'
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) return '이메일 형식을 확인하세요.'
+  if (form.password.length < MIN_PASSWORD_LENGTH) return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`
+  if (form.password !== form.passwordConfirm) return '비밀번호가 서로 다릅니다.'
+  return null
 }
 
 export function confirmAlert(alerts: AlertItem[], id: string): AlertItem[] {
