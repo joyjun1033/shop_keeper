@@ -19,6 +19,7 @@ KST = timezone(timedelta(hours=9))
 RECENT_ALERT_COUNT = 3
 # 관리용 앱은 1분마다 신호를 보낸다. 5분 동안 없으면 끊긴 것으로 본다
 OFFLINE_AFTER = timedelta(minutes=5)
+ATTEMPT_RETENTION = timedelta(days=1)
 
 ALERT_PRESENTATION = {
     "movement": {"label": "이상 행동 감지", "tone": "red", "title": "상품 이동 감지"},
@@ -35,7 +36,7 @@ class EmailTaken(Exception):
     pass
 
 
-def _normalize_email(email: str) -> str:
+def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
@@ -49,7 +50,7 @@ def create_store(conn: sqlite3.Connection, name: str, email: str, password: str)
             conn.execute("INSERT INTO stores (id, name) VALUES (?, ?)", (store_id, name))
             conn.execute(
                 "INSERT INTO owners (store_id, email, password_hash) VALUES (?, ?, ?)",
-                (store_id, _normalize_email(email), password_hash),
+                (store_id, normalize_email(email), password_hash),
             )
             conn.execute(
                 "INSERT INTO devices (key_hash, store_id) VALUES (?, ?)",
@@ -60,11 +61,32 @@ def create_store(conn: sqlite3.Connection, name: str, email: str, password: str)
     return store_id, device_key
 
 
+def too_many_attempts(conn: sqlite3.Connection, key: str, now: datetime, limit: int, window: timedelta) -> bool:
+    count = conn.execute(
+        "SELECT COUNT(*) FROM auth_attempts WHERE key = ? AND attempted_at > ?",
+        (key, (now - window).timestamp()),
+    ).fetchone()[0]
+    return count >= limit
+
+
+def record_attempt(conn: sqlite3.Connection, key: str, now: datetime) -> None:
+    with transaction(conn):
+        conn.execute(
+            "DELETE FROM auth_attempts WHERE attempted_at <= ?",
+            ((now - ATTEMPT_RETENTION).timestamp(),),
+        )
+        conn.execute("INSERT INTO auth_attempts (key, attempted_at) VALUES (?, ?)", (key, now.timestamp()))
+
+
+def clear_attempts(conn: sqlite3.Connection, key: str) -> None:
+    conn.execute("DELETE FROM auth_attempts WHERE key = ?", (key,))
+
+
 def add_device(conn: sqlite3.Connection, email: str) -> str | None:
     """점주의 매장에 관리용 앱 키를 하나 더 만든다. 없는 계정이면 None을 돌려준다."""
     owner = conn.execute(
         "SELECT store_id FROM owners WHERE email = ?",
-        (_normalize_email(email),),
+        (normalize_email(email),),
     ).fetchone()
     if owner is None:
         return None
@@ -79,7 +101,7 @@ def add_device(conn: sqlite3.Connection, email: str) -> str | None:
 def login(conn: sqlite3.Connection, email: str, password: str, now: datetime, ttl: timedelta) -> str | None:
     owner = conn.execute(
         "SELECT id, password_hash FROM owners WHERE email = ?",
-        (_normalize_email(email),),
+        (normalize_email(email),),
     ).fetchone()
     stored = owner["password_hash"] if owner else security.DUMMY_PASSWORD_HASH
     if not security.verify_password(password, stored) or owner is None:

@@ -81,6 +81,31 @@ cd server
 .venv/Scripts/python clear_dev_data.py
 ```
 
+## 배포
+
+`Dockerfile` 하나로 배포합니다. 서버 하나가 API와 앱 화면을 함께 제공하므로 주소가 하나입니다.
+
+```bash
+docker build -t keeper .
+```
+
+```bash
+docker run -p 8000:8000 -v keeper-data:/data keeper
+```
+
+호스팅 서비스에 올릴 때 지켜야 할 것은 다음과 같습니다.
+
+- **영구 저장소:** 컨테이너의 `/data` 폴더를 영구 저장소에 연결합니다. 연결하지 않으면 재시작할 때 모든 데이터가 사라집니다.
+- **서버는 한 대만:** SQLite를 쓰므로 같은 DB로 서버를 두 대 이상 띄우면 안 됩니다. 여러 대가 필요해지면 PostgreSQL로 옮겨야 합니다.
+- **HTTPS:** 호스팅 서비스의 HTTPS를 켭니다. 비밀번호와 기기 키가 오가므로 HTTP로 운영하면 안 됩니다.
+- **프록시:** `FORWARDED_ALLOW_IPS=*`는 호스팅 서비스의 프록시 뒤에 있을 때만 안전합니다. 서버를 인터넷에 직접 노출한다면 값을 바꿔야 합니다.
+- **백업:** 예약 작업으로 하루 한 번 `python -m keeper.backup /data/backups`를 실행하고, 백업 파일을 다른 곳에도 보관합니다.
+- **상태 확인:** 호스팅 서비스의 상태 확인 경로는 `/health`입니다.
+
+설정 항목은 `.env.example`에 있습니다. DB 구조를 바꿀 때는 `server/keeper/db.py`의 `MIGRATIONS` 맨 뒤에 추가합니다.
+
+개발용 스크립트(`seed.py`, `simulator.py`, `clear_dev_data.py`, `issue_device_key.py`)는 배포 이미지에 들어가지 않습니다.
+
 ## 테스트
 
 ```bash

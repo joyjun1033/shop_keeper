@@ -34,6 +34,7 @@ function createFakeServer() {
 
     if (input === '/api/auth/login') {
       const { password } = JSON.parse(init.body as string)
+      if (password === 'limited') return respond({}, 429)
       return password === 'right' ? respond({ token: TOKEN }) : respond({}, 401)
     }
     if (input === '/api/auth/signup') {
@@ -122,6 +123,15 @@ describe('로그인', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('이메일 또는 비밀번호가 올바르지 않습니다.')
     expect(window.localStorage.getItem(TOKEN_KEY)).toBeNull()
+  })
+
+  test('시도가 너무 많으면 잠시 후 다시 시도하라고 안내한다', async () => {
+    createFakeServer()
+    render(<App dataSource="api" />)
+
+    await login('limited')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('시도가 너무 많습니다.')
   })
 
   test('서버에 연결할 수 없으면 비밀번호 오류와 구분해서 안내한다', async () => {
@@ -271,6 +281,7 @@ describe('회원가입', () => {
   test.each([
     [409, '이미 가입된 이메일입니다.'],
     [422, '입력한 내용을 확인해 주세요.'],
+    [429, '시도가 너무 많습니다.'],
     [500, '서버에 연결할 수 없습니다.'],
   ])('서버가 %i로 거부하면 안내하고 다시 시도할 수 있다', async (status, message) => {
     const server = createFakeServer()

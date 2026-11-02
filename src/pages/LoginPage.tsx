@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError, login } from '../api/httpApi'
 
+function loginFailureMessage(failure: unknown): string {
+  if (failure instanceof ApiError && failure.status === 401) return '이메일 또는 비밀번호가 올바르지 않습니다.'
+  if (failure instanceof ApiError && failure.status === 429) return '시도가 너무 많습니다. 잠시 후 다시 시도하세요.'
+  return '서버에 연결할 수 없습니다.'
+}
+
 type Props = {
   baseUrl: string
   onLogin: (token: string) => void
@@ -20,8 +26,7 @@ export default function LoginPage({ baseUrl, onLogin, onSignup }: Props) {
     try {
       onLogin(await login(baseUrl, email, password))
     } catch (failure) {
-      const wrongCredentials = failure instanceof ApiError && failure.status === 401
-      setError(wrongCredentials ? '이메일 또는 비밀번호가 올바르지 않습니다.' : '서버에 연결할 수 없습니다.')
+      setError(loginFailureMessage(failure))
       setSubmitting(false)
     }
   }

@@ -5,6 +5,7 @@ import { getSignupError } from '../domain/rules'
 function signupFailureMessage(failure: unknown): string {
   if (failure instanceof ApiError && failure.status === 409) return '이미 가입된 이메일입니다.'
   if (failure instanceof ApiError && failure.status === 422) return '입력한 내용을 확인해 주세요.'
+  if (failure instanceof ApiError && failure.status === 429) return '시도가 너무 많습니다. 잠시 후 다시 시도하세요.'
   return '서버에 연결할 수 없습니다.'
 }
 

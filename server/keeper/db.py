@@ -79,6 +79,17 @@ CREATE TABLE IF NOT EXISTS inquiries (
 CREATE INDEX IF NOT EXISTS inquiries_by_time ON inquiries (store_id, occurred_ts);
 """
 
+AUTH_ATTEMPTS = """
+CREATE TABLE IF NOT EXISTS auth_attempts (
+  key TEXT NOT NULL,
+  attempted_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS auth_attempts_by_key ON auth_attempts (key, attempted_at);
+"""
+
+# DB 구조를 바꿀 때는 기존 항목을 고치지 않고 맨 뒤에 추가한다
+MIGRATIONS = [SCHEMA, AUTH_ATTEMPTS]
+
 
 def connect(path: str | Path) -> sqlite3.Connection:
     # FastAPI가 의존성과 경로 함수를 서로 다른 스레드에서 실행할 수 있다
@@ -89,10 +100,14 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 
 def init_db(path: str | Path) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = connect(path)
     try:
         conn.execute("PRAGMA journal_mode = WAL")
-        conn.executescript(SCHEMA)
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        for index in range(version, len(MIGRATIONS)):
+            conn.executescript(MIGRATIONS[index])
+            conn.execute(f"PRAGMA user_version = {index + 1}")
     finally:
         conn.close()
 
